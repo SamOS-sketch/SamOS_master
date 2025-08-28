@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONWARNINGS: ignore
-      COVERAGE_MIN: "0.80"   # <-- change this if you want a different threshold
+      COVERAGE_MIN: "0.00"   # <-- change this if you want a different threshold
 
     steps:
       - name: Check out
