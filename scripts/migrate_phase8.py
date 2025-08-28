@@ -13,7 +13,7 @@ statements = [
     "ALTER TABLE images ADD COLUMN tier TEXT;",
     "ALTER TABLE images ADD COLUMN latency_ms INTEGER;",
     "ALTER TABLE images ADD COLUMN reference_used BOOLEAN;",
-    "ALTER TABLE images ADD COLUMN provenance TEXT;"
+    "ALTER TABLE images ADD COLUMN provenance TEXT;",
 ]
 
 with engine.connect() as conn:
