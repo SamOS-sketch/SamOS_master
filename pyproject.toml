@@ -33,17 +33,18 @@ extend-exclude = '''
 
 [tool.flake8]
 max-line-length = 100
-extend-ignore = E203,W503
-exclude = 
-  .git,
-  __pycache__,
-  .venv,
-  venv,
-  build,
-  dist,
-  snapshots,
-  samos/api,
-  samos/sdk/python,
-  *.db,
-  *.db-shm,
-  *.db-w*
+extend-ignore = ["E203", "W503"]
+exclude = [
+  ".git",
+  "__pycache__",
+  ".venv",
+  "venv",
+  "build",
+  "dist",
+  "snapshots",
+  "samos/api",
+  "samos/sdk/python",
+  "*.db",
+  "*.db-shm",
+  "*.db-wal"
+]
