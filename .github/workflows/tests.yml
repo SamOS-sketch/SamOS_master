@@ -2,22 +2,30 @@ name: CI
 
 on:
   push:
+    branches: [ "**" ]
   pull_request:
+    branches: [ "**" ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      PYTHONWARNINGS: ignore
+      COVERAGE_MIN: "0.80"   # <-- change this if you want a different threshold
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pytest-cov flake8 black
+          pip install pytest pytest-cov flake8 black
 
       - name: Lint (flake8)
         run: flake8 .
@@ -26,11 +34,32 @@ jobs:
         run: black --check .
 
       - name: Run tests with coverage
-        run: python -m pytest
+        run: |
+          pytest
+
+      - name: Enforce coverage threshold
+        run: |
+          python - << 'PY'
+          import sys, os, xml.etree.ElementTree as ET
+          path = "coverage.xml"
+          try:
+              root = ET.parse(path).getroot()
+          except Exception as e:
+              print(f"ERROR: cannot read {path}: {e}")
+              sys.exit(1)
+          rate = float(root.attrib.get("line-rate", "0"))
+          pct = rate * 100.0
+          floor = float(os.environ.get("COVERAGE_MIN", "0.80")) * 100.0
+          print(f"Total coverage: {pct:.2f}%  (required ≥ {floor:.2f}%)")
+          if pct + 1e-9 < floor:
+              print("Coverage too low — failing the build.")
+              sys.exit(1)
+          print("Coverage OK.")
+          PY
 
       - name: Upload coverage.xml artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
           path: coverage.xml
-          if-no-files-found: error
