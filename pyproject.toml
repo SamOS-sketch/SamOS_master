@@ -3,3 +3,18 @@
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-q --maxfail=1 --disable-warnings"
+[tool.black]
+line-length = 100
+extend-exclude = '''
+/(
+    samos/sdk/python
+  | snapshots
+  | .*\.db
+  | .*\.db-shm
+  | .*\.db-wal
+  | build
+  | dist
+  | venv
+  | \.venv
+)/
+'''
