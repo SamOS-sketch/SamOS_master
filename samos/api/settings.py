@@ -29,7 +29,9 @@ REFERENCE_IMAGE_ALPHA = os.getenv("REFERENCE_IMAGE_ALPHA", "")
 
 # ---- Phase 7: Persistence & Recovery settings ----
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
-AUTO_RESTORE_LAST_SNAPSHOT = os.getenv("AUTO_RESTORE_LAST_SNAPSHOT", "false").lower() == "true"
+AUTO_RESTORE_LAST_SNAPSHOT = (
+    os.getenv("AUTO_RESTORE_LAST_SNAPSHOT", "false").lower() == "true"
+)
 FORCE_ON_NONEMPTY = os.getenv("FORCE_ON_NONEMPTY", "false").lower() == "true"
 SNAPSHOT_DIR = os.getenv("SNAPSHOT_DIR", "./snapshots")
 

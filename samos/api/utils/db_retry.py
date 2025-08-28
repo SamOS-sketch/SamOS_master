@@ -2,6 +2,7 @@
 import time
 from sqlalchemy.exc import OperationalError
 
+
 def commit_with_retry(db, retries: int = 5, base_delay: float = 0.05):
     """
     Commits the current transaction with exponential backoff if SQLite is briefly locked.
@@ -18,7 +19,7 @@ def commit_with_retry(db, retries: int = 5, base_delay: float = 0.05):
             if "database is locked" in msg or "timeout" in msg:
                 if attempt >= retries:
                     raise
-                time.sleep(base_delay * (2 ** attempt))
+                time.sleep(base_delay * (2**attempt))
                 attempt += 1
                 continue
             # Not a transient lock/timeout -> bubble up

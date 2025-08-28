@@ -1,4 +1,3 @@
-
 from samos.client import SamOSClient
 
 if __name__ == "__main__":
@@ -10,7 +9,7 @@ if __name__ == "__main__":
     print("Mode before:", c.get_mode(sid))
     print("Set mode to sandbox:", c.set_mode(sid, "sandbox"))
 
-    c.put_memory(sid, "demo.note", "hello world", meta={"source":"poc"})
+    c.put_memory(sid, "demo.note", "hello world", meta={"source": "poc"})
     print("Memory get:", c.get_memory(sid, "demo.note"))
     print("Image:", c.generate_image(sid, prompt="sunrise over calm sea"))
     print("EMMs:", c.list_emms(sid, limit=5))

@@ -1,7 +1,16 @@
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Text, DateTime, Integer, Boolean, ForeignKey, Index,
-    create_engine, func, text
+    Column,
+    String,
+    Text,
+    DateTime,
+    Integer,
+    Boolean,
+    ForeignKey,
+    Index,
+    create_engine,
+    func,
+    text,
 )
 from sqlalchemy.orm import relationship, declarative_base, sessionmaker
 from sqlalchemy.exc import OperationalError
@@ -29,6 +38,7 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 
+
 # Convenience generator (used by some routes)
 def get_db():
     db = SessionLocal()
@@ -37,7 +47,9 @@ def get_db():
     finally:
         db.close()
 
+
 # ---------- Models ----------
+
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -46,10 +58,16 @@ class Session(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    memories = relationship("Memory", back_populates="session", cascade="all, delete-orphan")
-    images   = relationship("Image",   back_populates="session", cascade="all, delete-orphan")
-    emms     = relationship("EMM",     back_populates="session", cascade="all, delete-orphan")
-    events   = relationship("Event",   back_populates="session", cascade="all, delete-orphan")
+    memories = relationship(
+        "Memory", back_populates="session", cascade="all, delete-orphan"
+    )
+    images = relationship(
+        "Image", back_populates="session", cascade="all, delete-orphan"
+    )
+    emms = relationship("EMM", back_populates="session", cascade="all, delete-orphan")
+    events = relationship(
+        "Event", back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class Memory(Base):
@@ -72,15 +90,19 @@ class Image(Base):
     prompt = Column(Text)
 
     # Phase 8 provenance fields
-    provider = Column(String, nullable=True)       # e.g. openai | stability_api | comfyui | stub
-    tier = Column(String, nullable=True)           # primary | recovery | fallback
-    latency_ms = Column(Integer, nullable=True)    # measured latency for the successful attempt
+    provider = Column(
+        String, nullable=True
+    )  # e.g. openai | stability_api | comfyui | stub
+    tier = Column(String, nullable=True)  # primary | recovery | fallback
+    latency_ms = Column(
+        Integer, nullable=True
+    )  # measured latency for the successful attempt
     reference_used = Column(Boolean, default=False)  # whether reference image was used
-    provenance = Column(Text, nullable=True)       # JSON-as-text for SQLite (extra details)
+    provenance = Column(Text, nullable=True)  # JSON-as-text for SQLite (extra details)
 
     # Existing fields
     url = Column(Text)
-    status = Column(String, default="ok")          # ok | failed
+    status = Column(String, default="ok")  # ok | failed
     meta_json = Column(Text, default="{}")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -104,11 +126,14 @@ class Event(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sessions.id"), nullable=True)
     ts = Column(DateTime, default=datetime.utcnow, nullable=False)
-    kind = Column(String, nullable=False)     # e.g. session.start, mode.set, image.generate.ok
+    kind = Column(
+        String, nullable=False
+    )  # e.g. session.start, mode.set, image.generate.ok
     message = Column(String, nullable=False)  # short summary
-    meta_json = Column(Text, nullable=True)   # JSON string payload
+    meta_json = Column(Text, nullable=True)  # JSON string payload
 
     session = relationship("Session", back_populates="events")
+
 
 # Helpful indexes
 Index("idx_events_session_ts", Event.session_id, Event.ts)
@@ -116,21 +141,25 @@ Index("idx_events_kind_ts", Event.kind, Event.ts)
 
 # ---------- Optional metrics tables (used by snapshot_service if present) ----------
 
+
 class MetricsCounter(Base):
     __tablename__ = "metrics_counters"
     key = Column(String, primary_key=True)
     value = Column(Integer, default=0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class MetricsBucket(Base):
     __tablename__ = "metrics_buckets"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    metric = Column(String, index=True)   # e.g. image.ok
-    period = Column(String)               # hour | day
-    bucket_start = Column(DateTime)       # period start time
+    metric = Column(String, index=True)  # e.g. image.ok
+    period = Column(String)  # hour | day
+    bucket_start = Column(DateTime)  # period start time
     value = Column(Integer, default=0)
 
+
 # ---------- init ----------
+
 
 def init_db():
     """Create all tables if they don't exist, and harden SQLite settings."""

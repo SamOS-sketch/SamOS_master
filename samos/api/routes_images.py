@@ -12,11 +12,13 @@ router = APIRouter()
 DEFAULT_MODE = os.getenv("DEFAULT_MODE", "sandbox")
 ROUTER = SamRouter(DEFAULT_MODE)
 
+
 class ImageGenerateRequest(BaseModel):
     prompt: str
     recovery_prompt: str | None = None
     fallback_prompt: str | None = None
     reference_path: str | None = None
+
 
 class ImageGenerateResponse(BaseModel):
     image_id: str
@@ -24,6 +26,7 @@ class ImageGenerateResponse(BaseModel):
     provider: str
     status: str
     meta: dict
+
 
 @router.post("/session/mode")
 def set_mode(mode: str):
@@ -33,8 +36,9 @@ def set_mode(mode: str):
     ROUTER = SamRouter(mode)
     return {"ok": True, "mode": mode}
 
+
 @router.post("/image/generate", response_model=ImageGenerateResponse)
-def image_generate(req: ImageGenerateRequest, db = Depends(get_db)):
+def image_generate(req: ImageGenerateRequest, db=Depends(get_db)):
     # Build tiered prompts (always fill all three, reusing the primary if missing)
     tiers = {
         "primary": req.prompt,
@@ -65,7 +69,7 @@ def image_generate(req: ImageGenerateRequest, db = Depends(get_db)):
 
     db_image = DBImage(
         id=result["image_id"],
-        session_id=None,                  # optional: wire a real session id if you have it
+        session_id=None,  # optional: wire a real session id if you have it
         prompt=req.prompt,
         provider=result["provider"],
         url=result["url"],

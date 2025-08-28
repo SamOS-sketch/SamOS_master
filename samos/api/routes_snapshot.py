@@ -20,6 +20,7 @@ SCHEMA_VERSION = 3
 
 # ---------- Pydantic models (strict validation) ----------
 
+
 class SnapshotModel(BaseModel):
     schema_version: int
     created_at: datetime
@@ -38,9 +39,10 @@ class RestoreEnvelope(BaseModel):
 
 # ---------- GET /snapshot ----------
 
+
 @router.get("/snapshot")
 def get_snapshot(
-    include: str = "active",            # 'active' or 'all'
+    include: str = "active",  # 'active' or 'all'
     events_per_session: int = 100,
     active_hours: int = 24,
     include_metrics: bool = True,
@@ -76,10 +78,11 @@ def get_snapshot(
 
 # ---------- POST /restore (strict, atomic, logged) ----------
 
+
 @router.post("/restore")
 def post_restore(
-    payload: RestoreEnvelope = Body(...),                 # {} -> 422 automatically
-    mode: str = Query("replace"),                         # 'replace' or 'merge' (we implement 'replace')
+    payload: RestoreEnvelope = Body(...),  # {} -> 422 automatically
+    mode: str = Query("replace"),  # 'replace' or 'merge' (we implement 'replace')
     # Accept BOTH common spellings; Swagger sometimes sends x-admin-token
     x_admin_token: Optional[str] = Header(None, alias="x_admin_token"),
     x_admin_token_alt: Optional[str] = Header(None, alias="x-admin-token"),
@@ -108,7 +111,15 @@ def post_restore(
     try:
         if mode == "replace":
             # FK-safe wipe order
-            for tbl in ("events", "images", "emms", "memories", "sessions", "metrics_buckets", "metrics_counters"):
+            for tbl in (
+                "events",
+                "images",
+                "emms",
+                "memories",
+                "sessions",
+                "metrics_buckets",
+                "metrics_counters",
+            ):
                 try:
                     db.execute(f"DELETE FROM {tbl}")
                 except Exception:
@@ -181,13 +192,22 @@ def post_restore(
             db.execute(
                 "INSERT OR REPLACE INTO metrics_counters (key, value, updated_at) "
                 "VALUES (:key,:value,:ua)",
-                {"key": c["key"], "value": c.get("value", 0), "ua": c.get("updated_at")},
+                {
+                    "key": c["key"],
+                    "value": c.get("value", 0),
+                    "ua": c.get("updated_at"),
+                },
             )
         for b in snap.metrics.get("buckets", []):
             db.execute(
                 "INSERT INTO metrics_buckets (metric, period, bucket_start, value) "
                 "VALUES (:m,:p,:bs,:v)",
-                {"m": b["metric"], "p": b["period"], "bs": b["bucket_start"], "v": b.get("value", 0)},
+                {
+                    "m": b["metric"],
+                    "p": b["period"],
+                    "bs": b["bucket_start"],
+                    "v": b.get("value", 0),
+                },
             )
 
         db.commit()
@@ -199,16 +219,20 @@ def post_restore(
     except Exception as e:
         db.rollback()
         record_event("recovery.fail", "Restore failed", None, {"error": str(e)})
-        raise HTTPException(status_code=400, detail="Restore failed: invalid or inconsistent snapshot")
+        raise HTTPException(
+            status_code=400, detail="Restore failed: invalid or inconsistent snapshot"
+        )
     finally:
         db.close()
 
 
 # ---------- GET /backups ----------
 
+
 @router.get("/backups")
 def list_backups():
     from pathlib import Path
+
     p = Path(SNAPSHOT_DIR)
     files = []
     if p.exists():

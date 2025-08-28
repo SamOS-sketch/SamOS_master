@@ -26,6 +26,7 @@ APP_VERSION = "samOS api 0.7.0"
 
 # ---------- helpers ----------
 
+
 def _dt(obj) -> Optional[str]:
     if not obj:
         return None
@@ -47,6 +48,7 @@ def _safe_filename(ts: datetime) -> str:
 def _try_read_live_metrics() -> Dict[str, int]:
     try:
         from samos.api.main import _METRICS  # type: ignore
+
         if isinstance(_METRICS, Counter):
             return dict(_METRICS)
         if isinstance(_METRICS, dict):
@@ -61,7 +63,9 @@ def _read_persisted_metrics(db: OrmSession) -> Dict[str, Any]:
 
     # counters
     try:
-        rows = db.execute(text("SELECT key, value, updated_at FROM metrics_counters")).fetchall()
+        rows = db.execute(
+            text("SELECT key, value, updated_at FROM metrics_counters")
+        ).fetchall()
         for r in rows:
             out["counters"].append(
                 {"key": r[0], "value": int(r[1] or 0), "updated_at": _dt(r[2])}
@@ -89,7 +93,9 @@ def _read_persisted_metrics(db: OrmSession) -> Dict[str, Any]:
     return out
 
 
-def _merge_live_into_persisted(live: Dict[str, int], persisted: Dict[str, Any]) -> Dict[str, Any]:
+def _merge_live_into_persisted(
+    live: Dict[str, int], persisted: Dict[str, Any]
+) -> Dict[str, Any]:
     counters_by_key = {c["key"]: c for c in persisted.get("counters", [])}
     for k, v in live.items():
         counters_by_key[k] = {"key": k, "value": int(v), "updated_at": _now_iso()}
@@ -101,10 +107,11 @@ def _merge_live_into_persisted(live: Dict[str, int], persisted: Dict[str, Any]) 
 
 # ---------- main API ----------
 
+
 def make_snapshot(
     db: OrmSession,
     *,
-    include: str = "active",                 # 'active' | 'all'
+    include: str = "active",  # 'active' | 'all'
     events_per_session: int = 100,
     active_hours: int = 24,
     include_metrics: bool = True,
@@ -144,12 +151,10 @@ def make_snapshot(
     # Memories
     memories: List[Dict[str, Any]] = []
     if sess_ids:
-        stmt = (
-            text(
-                "SELECT id, session_id, key, value, meta_json, created_at, updated_at "
-                "FROM memories WHERE session_id IN :ids"
-            ).bindparams(bindparam("ids", expanding=True))
-        )
+        stmt = text(
+            "SELECT id, session_id, key, value, meta_json, created_at, updated_at "
+            "FROM memories WHERE session_id IN :ids"
+        ).bindparams(bindparam("ids", expanding=True))
         mrows = db.execute(stmt, {"ids": list(sess_ids)}).fetchall()
     else:
         mrows = []
@@ -170,12 +175,10 @@ def make_snapshot(
     # Images
     images: List[Dict[str, Any]] = []
     if sess_ids:
-        stmt = (
-            text(
-                "SELECT id, session_id, prompt, provider, url, reference_used, status, meta_json, created_at "
-                "FROM images WHERE session_id IN :ids"
-            ).bindparams(bindparam("ids", expanding=True))
-        )
+        stmt = text(
+            "SELECT id, session_id, prompt, provider, url, reference_used, status, meta_json, created_at "
+            "FROM images WHERE session_id IN :ids"
+        ).bindparams(bindparam("ids", expanding=True))
         irows = db.execute(stmt, {"ids": list(sess_ids)}).fetchall()
     else:
         irows = []
@@ -252,7 +255,7 @@ def make_snapshot(
         "app_version": APP_VERSION,
         "sessions": sessions,
         "memories": memories,
-        "emms": [],          # reserved
+        "emms": [],  # reserved
         "images": images,
         "events": events,
         "metrics": metrics,
@@ -263,7 +266,11 @@ def make_snapshot(
 def store_snapshot(result: Dict[str, Any]) -> Path:
     import json
 
-    snapshot = result.get("snapshot") if isinstance(result, dict) and "snapshot" in result else result
+    snapshot = (
+        result.get("snapshot")
+        if isinstance(result, dict) and "snapshot" in result
+        else result
+    )
     ts = datetime.now(timezone.utc)
     fname = f"snapshot-{_safe_filename(ts)}.json"
     outdir = Path(SNAPSHOT_DIR)
@@ -274,4 +281,3 @@ def store_snapshot(result: Dict[str, Any]) -> Path:
         json.dump({"snapshot": snapshot}, f, ensure_ascii=False, indent=2)
 
     return path
-
