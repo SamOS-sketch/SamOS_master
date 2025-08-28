@@ -9,6 +9,7 @@ exclude =
     build,
     dist,
     snapshots,
+    samos/api,
     samos/sdk/python,
     *.db,
     *.db-shm,
