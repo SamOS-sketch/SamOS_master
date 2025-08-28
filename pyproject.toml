@@ -1,50 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "samos"
+version = "0.1.0"
+description = "SamOS Phase 4 scaffold"
+authors = [{ name = "Mark B" }]
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "pytest",
+    "pytest-cov",
+    "flake8",
+    "black"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["samos*"]
 [tool.pytest.ini_options]
-# Run only tests inside the tests/ folder
+# Only collect tests in the tests/ directory
 testpaths = ["tests"]
+# Only treat files named test_*.py as tests
 python_files = ["test_*.py"]
-
-# Pytest options: quiet, stop after first failure, show missing coverage
-addopts = [
-  "-q",
-  "--maxfail=1",
-  "--disable-warnings",
-  "--cov=samos",
-  "--cov-branch",
-  "--cov-report=term-missing",
-  "--cov-report=xml:coverage.xml"
-]
-
-[tool.black]
-line-length = 100
-extend-exclude = '''
-(
-  samos/api
-  | samos/sdk/python
-  | snapshots
-  | .*\.db
-  | .*\.db-shm
-  | .*\.db-wal
-  | build
-  | dist
-  | venv
-  | \.venv
-)
-'''
-
-[tool.flake8]
-max-line-length = 100
-extend-ignore = ["E203", "W503"]
-exclude = [
-  ".git",
-  "__pycache__",
-  ".venv",
-  "venv",
-  "build",
-  "dist",
-  "snapshots",
-  "samos/api",
-  "samos/sdk/python",
-  "*.db",
-  "*.db-shm",
-  "*.db-wal"
-]
+# Nice defaults for CI/local runs
+addopts = "-q --maxfail=1 --disable-warnings"
