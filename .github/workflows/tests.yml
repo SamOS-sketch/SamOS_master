@@ -37,7 +37,11 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest
+          pytest -q --maxfail=1 --disable-warnings \
+      --cov=samos --cov-branch \
+      --cov-report=term-missing \
+      --cov-report=xml:coverage.xml
+
 
       - name: Enforce coverage threshold
         run: |
