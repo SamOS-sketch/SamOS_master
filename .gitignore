@@ -1,1 +1,37 @@
-.env
+# --- Python cache & build ---
+__pycache__/
+*.py[cod]
+*.so
+.build/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# --- Test/coverage artifacts ---
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/
+
+# --- Environments ---
+.venv/
+venv/
+env/
+ENV/
+*.env
+*.env.*
+
+# --- Editors/OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Project-specific ---
+snapshots/
+samos/*.db
+*.db
+*.db-shm
+*.db-wal
