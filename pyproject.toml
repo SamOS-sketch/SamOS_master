@@ -1,13 +1,24 @@
 [tool.pytest.ini_options]
-# Only run tests inside the tests/ folder
+# Run only tests inside the tests/ folder
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-q --maxfail=1 --disable-warnings"
+
+# Pytest options: quiet, stop after first failure, show missing coverage
+addopts = [
+  "-q",
+  "--maxfail=1",
+  "--disable-warnings",
+  "--cov=samos",
+  "--cov-branch",
+  "--cov-report=term-missing",
+  "--cov-report=xml:coverage.xml"
+]
+
 [tool.black]
 line-length = 100
 extend-exclude = '''
-/(
-    samos/api
+(
+  samos/api
   | samos/sdk/python
   | snapshots
   | .*\.db
@@ -17,5 +28,22 @@ extend-exclude = '''
   | dist
   | venv
   | \.venv
-)/
+)
 '''
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = E203,W503
+exclude = 
+  .git,
+  __pycache__,
+  .venv,
+  venv,
+  build,
+  dist,
+  snapshots,
+  samos/api,
+  samos/sdk/python,
+  *.db,
+  *.db-shm,
+  *.db-w*
