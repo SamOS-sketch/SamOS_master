@@ -1,0 +1,8 @@
+pyproject.toml
+samos/__init__.py
+samos/client.py
+samos.egg-info/PKG-INFO
+samos.egg-info/SOURCES.txt
+samos.egg-info/dependency_links.txt
+samos.egg-info/requires.txt
+samos.egg-info/top_level.txt

@@ -1,0 +1,7 @@
+
+[project]
+name = "samos"
+version = "0.0.1"
+description = "SamOS Python SDK (Phase 4)"
+requires-python = ">=3.9"
+dependencies = ["httpx"]

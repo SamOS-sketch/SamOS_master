@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+SQLAlchemy
+python-dotenv
+httpx
+httpx
+openai>=1.35.0

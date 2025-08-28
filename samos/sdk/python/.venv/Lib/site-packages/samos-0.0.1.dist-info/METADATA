@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: samos
+Version: 0.0.1
+Summary: SamOS Python SDK (Phase 4)
+Requires-Python: >=3.9
+Requires-Dist: httpx

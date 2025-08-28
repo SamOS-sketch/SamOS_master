@@ -1,0 +1,186 @@
+{
+  "snapshot": {
+    "schema_version": 3,
+    "created_at": "2025-08-27T10:18:58.925359+00:00",
+    "app_version": "samOS api 0.7.0",
+    "sessions": [
+      {
+        "id": "1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236",
+        "mode": "work",
+        "created_at": "2025-08-27 09:40:33.613673",
+        "updated_at": "2025-08-27 09:40:33.613673"
+      }
+    ],
+    "memories": [],
+    "emms": [],
+    "images": [
+      {
+        "id": "f51f127a-eea4-4395-8f16-f9ac2710f324",
+        "session_id": "1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236",
+        "prompt": "stub ok test",
+        "provider": "stub",
+        "url": "stub://image/f51f127a-eea4-4395-8f16-f9ac2710f324",
+        "reference_used": "image\\ref_alpha.jpg",
+        "status": "ok",
+        "meta_json": "{\"prompt\": \"stub ok test\", \"session_id\": \"1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236\"}",
+        "created_at": "2025-08-27 09:44:52.780856"
+      },
+      {
+        "id": "ce618331-35e9-4b85-8ea4-7cf9b6e0ea9d",
+        "session_id": "1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236",
+        "prompt": "force_fail",
+        "provider": "stub",
+        "url": "",
+        "reference_used": "image\\ref_alpha.jpg",
+        "status": "failed",
+        "meta_json": "{\"error\": \"StubProvider forced failure for testing\"}",
+        "created_at": "2025-08-27 09:45:34.122860"
+      }
+    ],
+    "events": [
+      {
+        "id": 15,
+        "session_id": "1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236",
+        "ts": "2025-08-27 09:45:34.122860",
+        "kind": "image.generate.fail",
+        "message": "Image failed",
+        "meta_json": "{\"error\": \"StubProvider forced failure for testing\"}"
+      },
+      {
+        "id": 14,
+        "session_id": "1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236",
+        "ts": "2025-08-27 09:44:52.794155",
+        "kind": "image.generate.ok",
+        "message": "Image created",
+        "meta_json": "{\"provider\": \"stub\", \"image_id\": \"f51f127a-eea4-4395-8f16-f9ac2710f324\"}"
+      },
+      {
+        "id": 13,
+        "session_id": "1e1c1fc9-a1e9-4436-b0a3-9a7e4d8d1236",
+        "ts": "2025-08-27 09:40:33.613673",
+        "kind": "session.start",
+        "message": "Session created",
+        "meta_json": "{\"mode\": \"work\"}"
+      },
+      {
+        "id": 16,
+        "session_id": null,
+        "ts": "2025-08-27 09:52:53.384487",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 12,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:17.922404",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 11,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:16.825975",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 10,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:15.980960",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 9,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:15.117830",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 8,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:14.270888",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 7,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:13.396190",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 6,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:12.539890",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 5,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:11.679644",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 4,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:10.808663",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 3,
+        "session_id": null,
+        "ts": "2025-08-27 09:32:09.876989",
+        "kind": "snapshot.create",
+        "message": "Snapshot created",
+        "meta_json": "{\"include\": \"active\", \"events_per_session\": 100, \"active_hours\": 24, \"include_metrics\": true, \"store\": true}"
+      },
+      {
+        "id": 2,
+        "session_id": null,
+        "ts": "2025-08-27 09:27:28.549904",
+        "kind": "recovery.fail",
+        "message": "Restore rejected: schema version mismatch",
+        "meta_json": "{\"expected\": 3, \"got\": 999}"
+      },
+      {
+        "id": 1,
+        "session_id": null,
+        "ts": "2025-08-27 08:58:26.805610",
+        "kind": "snapshot.restore",
+        "message": "Snapshot restored",
+        "meta_json": "{\"mode\": \"replace\"}"
+      }
+    ],
+    "metrics": {
+      "counters": [
+        {
+          "key": "http.requests",
+          "value": 1,
+          "updated_at": "2025-08-27T10:18:58.928776+00:00"
+        },
+        {
+          "key": "http.path:/snapshot",
+          "value": 1,
+          "updated_at": "2025-08-27T10:18:58.928776+00:00"
+        }
+      ],
+      "buckets": []
+    }
+  }
+}

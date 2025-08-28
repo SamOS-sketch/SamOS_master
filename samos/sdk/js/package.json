@@ -1,0 +1,10 @@
+{
+  "name": "samos-sdk",
+  "version": "0.0.1",
+  "description": "SamOS JS SDK (Phase 4)",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.2"
+  }
+}
