@@ -8,7 +8,7 @@ on:
 
 env:
   # set the floor you want; you can tighten this later
-  COVERAGE_MIN: "0.00"
+  COVERAGE_MIN: "0.50"
 
 jobs:
   test:

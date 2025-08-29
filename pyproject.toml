@@ -1,29 +1,22 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "samos"
 version = "0.1.0"
-description = "SamOS Phase 4 scaffold"
-authors = [{ name = "Mark B" }]
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2.5", "PyYAML>=6.0"]
+description = "SamOS – minimal runtime with soulprint, router and skills"
 readme = "README.md"
-requires-python = ">=3.9"
-
-dependencies = [
-    "pytest",
-    "pytest-cov",
-    "flake8",
-    "black"
-]
 
 [tool.setuptools.packages.find]
-where = ["."]
 include = ["samos*"]
+exclude = ["tests*", "examples*", "snapshots*", ".github*", "docs*"]
+
 [tool.pytest.ini_options]
-# Only collect tests in the tests/ directory
 testpaths = ["tests"]
-# Only treat files named test_*.py as tests
-python_files = ["test_*.py"]
-# Nice defaults for CI/local runs
-addopts = "-q --maxfail=1 --disable-warnings"
+addopts = "-q"
+
+[project.scripts]
+samos = "samos.cli:main"

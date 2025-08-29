@@ -1,37 +1,28 @@
-# --- Python cache & build ---
-__pycache__/
-*.py[cod]
-*.so
-.build/
-dist/
-build/
-*.egg-info/
-.eggs/
-
-# --- Test/coverage artifacts ---
-.coverage
-.coverage.*
-htmlcov/
-coverage.xml
-.pytest_cache/
-
-# --- Environments ---
+# Python env/artifacts
 .venv/
-venv/
-env/
-ENV/
-*.env
-*.env.*
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+samos.egg-info/
 
-# --- Editors/OS ---
-.vscode/
-.idea/
+# Local DBs
+samos.db
+demo.db
+*.sqlite
+*samos - Copy*.db
+
+# Snapshots / generated
+snapshots/
+samos/api/generated/
+
+# JS artifacts
+samos/sdk/js/node_modules/
+samos/sdk/js/package-lock.json
+
+# OS/editor
 .DS_Store
 Thumbs.db
-
-# --- Project-specific ---
-snapshots/
-samos/*.db
-*.db
-*.db-shm
-*.db-wal
+.vscode/
+.env

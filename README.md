@@ -1,12 +1,3 @@
-Metadata-Version: 2.4
-Name: samos
-Version: 0.1.0
-Summary: SamOS – minimal runtime with soulprint, router and skills
-Requires-Python: >=3.10
-Description-Content-Type: text/markdown
-Requires-Dist: pydantic>=2.5
-Requires-Dist: PyYAML>=6.0
-
 # SamOS\\nMinimal runtime for Phase 10.
 
 \## Build a Skill in 60 seconds
