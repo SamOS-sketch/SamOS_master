@@ -2,6 +2,18 @@
 
 \## Build a Skill in 60 seconds
 
+# SamOS_master
+
+![Build Status](https://img.shields.io/badge/tests-passing-brightgreen)
+![Phase](https://img.shields.io/badge/phase-10%20✔-blue)
+![Version](https://img.shields.io/badge/version-v0.1.0--phase10-orange)
+![License](https://img.shields.io/badge/license-private-lightgrey)
+
+---
+
+Minimal runtime for Phase 10.  
+SamOS is evolving through structured development phases, each tagged in GitHub for clarity.  
+
 
 
 Create `my\_skill.py`:

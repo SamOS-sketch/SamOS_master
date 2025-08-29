@@ -1,28 +1,12 @@
-# Python env/artifacts
 .venv/
+venv/
 __pycache__/
-*.pyc
 .pytest_cache/
-.coverage
-coverage.xml
-samos.egg-info/
-
-# Local DBs
-samos.db
-demo.db
-*.sqlite
-*samos - Copy*.db
-
-# Snapshots / generated
-snapshots/
-samos/api/generated/
-
-# JS artifacts
-samos/sdk/js/node_modules/
-samos/sdk/js/package-lock.json
-
-# OS/editor
-.DS_Store
-Thumbs.db
-.vscode/
 .env
+.env.*
+dist/
+build/
+*.sqlite*
+.DS_Store
+.idea/
+.vscode/
