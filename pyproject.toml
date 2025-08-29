@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools_scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "samos"
-version = "0.1.0"
+dynamic = ["version"]                 # ← version comes from git tags
 requires-python = ">=3.10"
 dependencies = ["pydantic>=2.5", "PyYAML>=6.0"]
 description = "SamOS – minimal runtime with soulprint, router and skills"
@@ -20,3 +20,10 @@ addopts = "-q"
 
 [project.scripts]
 samos = "samos.cli:main"
+
+# --- setuptools_scm config ---
+[tool.setuptools_scm]
+# Produce clean versions from tags; no '+gHASH' in built wheels
+local_scheme = "no-local-version"
+# Write a build-time version file so 'import samos; samos.__version__' works in wheels
+write_to = "samos/_version.py"

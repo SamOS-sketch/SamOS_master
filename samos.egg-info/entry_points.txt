@@ -1,2 +1,0 @@
-[console_scripts]
-samos = samos.cli:main

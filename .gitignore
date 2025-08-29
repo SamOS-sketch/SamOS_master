@@ -10,3 +10,8 @@ build/
 .DS_Store
 .idea/
 .vscode/
+# build metadata
+*.egg-info/
+samos.egg-info/
+samos/_version.py
+
