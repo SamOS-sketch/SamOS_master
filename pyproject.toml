@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "samos"
-dynamic = ["version"]                 # ← version comes from git tags
+dynamic = ["version"]                 # version comes from git tags
 requires-python = ">=3.10"
 dependencies = ["pydantic>=2.5", "PyYAML>=6.0"]
 description = "SamOS – minimal runtime with soulprint, router and skills"
@@ -27,3 +27,5 @@ samos = "samos.cli:main"
 local_scheme = "no-local-version"
 # Write a build-time version file so 'import samos; samos.__version__' works in wheels
 write_to = "samos/_version.py"
+# HARDENING: accept only tags like v1.2.3 or v1.2.3rc1
+tag_regex = "^v(?P<version>\\d+\\.\\d+\\.\\d+(?:rc\\d+)?)$"
