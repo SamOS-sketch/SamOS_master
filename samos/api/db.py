@@ -1,4 +1,6 @@
 from datetime import datetime
+import os
+
 from sqlalchemy import (
     Column,
     String,
@@ -15,7 +17,31 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship, declarative_base, sessionmaker
 from sqlalchemy.exc import OperationalError
 
-from samos.api.settings import DB_URL
+# Persona-aware DB routing
+from samos.core.persona import get_persona, db_filename
+
+# Keep import for compatibility, but persona routing will be used unless DATABASE_URL is set explicitly.
+try:
+    from samos.api.settings import DB_URL as _SETTINGS_DB_URL  # noqa: F401
+except Exception:
+    _SETTINGS_DB_URL = None  # settings module optional / legacy
+
+
+# ---------- Resolve DB URL (env > persona routing) ----------
+
+def _resolve_db_url() -> str:
+    # Highest precedence: explicit DATABASE_URL from environment
+    env_url = os.getenv("DATABASE_URL")
+    if env_url and env_url.strip():
+        return env_url.strip()
+
+    # Persona-based default (private → samos.db, demo → demo.db)
+    persona = get_persona()
+    return f"sqlite:///./{db_filename(persona)}"
+
+
+DB_URL = _resolve_db_url()
+
 
 # ---------- SQLAlchemy base / engine / session ----------
 Base = declarative_base()
@@ -37,6 +63,16 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
+
+
+# Optional: lightweight startup log for visibility
+try:
+    # only import here to avoid circulars if app boot order changes
+    persona_label = get_persona().value
+except Exception:
+    persona_label = "unknown"
+
+print(f"[SamOS] DB: {DB_URL}  |  Persona: {persona_label}")
 
 
 # Convenience generator (used by some routes)
