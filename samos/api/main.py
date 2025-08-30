@@ -16,20 +16,10 @@ from sqlalchemy import text
 
 from samos.api.db import (
     EMM as DBEMM,
-)
-from samos.api.db import (
     Event as DBEvent,
-)
-from samos.api.db import (
     Image as DBImage,
-)
-from samos.api.db import (
     Memory as DBMemory,
-)
-from samos.api.db import (
     Session as DBSession,
-)
-from samos.api.db import (
     SessionLocal,
     init_db,
 )
@@ -54,13 +44,8 @@ from samos.config import assert_persona_safety, settings
 from samos.core.memory_agent import get_memory_agent
 from samos.core.soulprint_loader import load_soulprint
 
-# -----------------------------------------------------------------------------
-# App & middleware
-# -----------------------------------------------------------------------------
-
 app = FastAPI(title="SamOS API (Phase 11.1)")
 
-# CORS from settings (comma-separated list already parsed in settings.cors_origins)
 if settings.cors_origins:
     app.add_middleware(
         CORSMiddleware,
@@ -70,24 +55,17 @@ if settings.cors_origins:
         allow_headers=["*"],
     )
 
-# Mount routers
 app.include_router(snapshot_router)
 app.include_router(image_router)
 
-# In-memory counters
 _METRICS: Counter[str] = Counter()
 
-# Globals filled during startup
 SOULPRINT: dict | object = {}
 SOULPRINT_PATH: str = "UNAVAILABLE"
 AGENT = None  # MemoryAgent
 
-# -----------------------------------------------------------------------------
-# Providers (feature-flagged; lazy import to avoid optional deps at import time)
-# -----------------------------------------------------------------------------
 
 class _ComfyUIStub(StubProvider):
-    """Placeholder so IMAGE_PROVIDER=comfyui still works on machines without ComfyUI."""
     name = "comfyui-stub"
 
 
@@ -115,30 +93,22 @@ def _get_provider():
 
 
 def _reference_image(default_fallback: str = "ref_alpha.jpg") -> str:
-    # Keep env override for backward-compat
     return os.getenv("REFERENCE_IMAGE_ALPHA", "") or default_fallback
 
-
-# -----------------------------------------------------------------------------
-# Startup: persona safety → DB init → soulprint → agent
-# -----------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def _startup() -> None:
     global SOULPRINT, SOULPRINT_PATH, AGENT
 
-    # Persona guard (reads env/settings and can raise)
     assert_persona_safety()
 
-    # DB init (prefer URL argument; fall back to env for older init_db)
     db_url = settings.resolved_db_url()
     try:
-        init_db(db_url)  # type: ignore[arg-type]
+        init_db(db_url)  # type: ignore[call-arg]
     except TypeError:
         os.environ["DB_URL"] = db_url
         init_db()
 
-    # Soulprint (path & parsed object)
     try:
         SOULPRINT, SOULPRINT_PATH = load_soulprint()
         print(f"[SamOS] Soulprint: {SOULPRINT_PATH}")
@@ -146,17 +116,12 @@ async def _startup() -> None:
         SOULPRINT, SOULPRINT_PATH = {}, "UNAVAILABLE"
         print(f"[SamOS] Soulprint load error: {e}")
 
-    # Memory agent (optional)
     try:
         AGENT = get_memory_agent()
     except Exception as e:  # noqa: BLE001
         AGENT = None
         print(f"[SamOS] MemoryAgent init error: {e}")
 
-
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
 
 DEFAULT_MODE = os.getenv("SAM_MODE_DEFAULT", "work")
 
@@ -215,10 +180,6 @@ def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
         return None
     return datetime.fromisoformat(dt.rstrip("Z"))
 
-
-# -----------------------------------------------------------------------------
-# Health & metrics
-# -----------------------------------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -296,10 +257,6 @@ async def metrics_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# -----------------------------------------------------------------------------
-# Events
-# -----------------------------------------------------------------------------
-
 @app.get("/events")
 def list_events(
     session_id: Optional[str] = Query(None),
@@ -347,10 +304,6 @@ def export_events(
 ):
     return list_events(session_id=session_id, kind=kind, since=since, until=until, limit=limit)
 
-
-# -----------------------------------------------------------------------------
-# Sessions
-# -----------------------------------------------------------------------------
 
 @app.post("/session/start", response_model=SessionStartResponse)
 def start_session():
@@ -408,10 +361,6 @@ def set_mode(req: ModeSetRequest):
     finally:
         db.close()
 
-
-# -----------------------------------------------------------------------------
-# Memory
-# -----------------------------------------------------------------------------
 
 @app.post("/memory")
 def put_memory(req: MemoryPutRequest):
@@ -495,10 +444,6 @@ def list_memory(session_id: str = Query(...)):
         db.close()
 
 
-# -----------------------------------------------------------------------------
-# EMM
-# -----------------------------------------------------------------------------
-
 @app.post("/emm")
 def create_emm(req: EMMCreateRequest):
     db = SessionLocal()
@@ -510,7 +455,7 @@ def create_emm(req: EMMCreateRequest):
         e = DBEMM(
             session_id=req.session_id,
             type=req.type,
-            message=req.message,
+            message=req.message or "",
             meta_json=json.dumps(req.meta or {}),
         )
         db.add(e)
@@ -519,7 +464,7 @@ def create_emm(req: EMMCreateRequest):
         record_event("emm.create", "EMM created", req.session_id, {"type": req.type})
         try:
             if AGENT:
-                AGENT.on_emm(req.session_id, req.type, req.message)
+                AGENT.on_emm(req.session_id, req.type, req.message or "")
         except Exception:  # noqa: BLE001
             pass
 
@@ -581,10 +526,6 @@ def export_emms(session_id: str = Query(...)):
         db.close()
 
 
-# -----------------------------------------------------------------------------
-# Images
-# -----------------------------------------------------------------------------
-
 @app.post("/image/generate", response_model=ImageGenerateResponse)
 def generate_image(req: ImageGenerateRequest):
     db = SessionLocal()
@@ -596,7 +537,6 @@ def generate_image(req: ImageGenerateRequest):
         provider = _get_provider()
         reference = getattr(req, "reference_image", None) or _reference_image()
 
-        # try success path
         try:
             result = provider.generate(
                 session_id=req.session_id,
@@ -640,7 +580,6 @@ def generate_image(req: ImageGenerateRequest):
 
             return ImageGenerateResponse(**result)
 
-        # on failure: record EMM + failed image row, then raise 500
         except Exception as e:  # noqa: BLE001
             emm = DBEMM(
                 session_id=req.session_id,

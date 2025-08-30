@@ -1,66 +1,56 @@
 # samos/api/providers/__init__.py
 """
-Provider re-exports for image generation.
+Provider re-exports for image generation (Phase 11.1).
 
-This module is defensive: it imports whichever providers are available in the
-current tree and exposes a stable set of names for the rest of the codebase.
-
-- Prefer the newer modules under `samos.api.image.*`
-- Fall back to legacy locations under `samos.api.providers.*` if present
-- LLM providers are intentionally NOT imported in Phase 11.1
+- Keep image providers only.
+- Be defensive: import what's available without type-ignores.
+- Do NOT import LLM providers here.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 __all__: list[str] = []
 
-# --- StubProvider -------------------------------------------------------------
-
+# StubProvider ---------------------------------------------------------------
 try:
-    # New location
-    from samos.api.image.stub import StubProvider as _StubProvider  # type: ignore
+    from samos.api.image.stub import StubProvider  # new location
 except Exception:
     try:
-        # Legacy location (if still present)
-        from .stub import StubProvider as _StubProvider  # type: ignore
+        from .stub import StubProvider  # legacy fallback
     except Exception:  # pragma: no cover
-        _StubProvider = None  # type: ignore[assignment]
+        StubProvider = None  # type: ignore[assignment]
 
-if _StubProvider is not None:
-    StubProvider = _StubProvider  # type: ignore[misc,assignment]
+if StubProvider is not None:  # type: ignore[comparison-overlap]
     __all__.append("StubProvider")
 
-
-# --- OpenAIImages (alias to OpenAIProvider) ----------------------------------
-
+# OpenAIImages (alias to OpenAIProvider) -------------------------------------
+OpenAIImages = None
 try:
-    # New location + class name
-    from samos.api.image.openai_provider import OpenAIProvider as _OpenAIImages  # type: ignore
+    # new provider class
+    from samos.api.image.openai_provider import OpenAIProvider as _OpenAIImages
+
+    OpenAIImages = _OpenAIImages  # keep historical symbol
 except Exception:
     try:
-        # Legacy location/class (if present)
-        from .openai_provider import OpenAIImages as _OpenAIImages  # type: ignore
-    except Exception:  # pragma: no cover
-        _OpenAIImages = None  # type: ignore[assignment]
+        # legacy provider symbol if present
+        from .openai_provider import OpenAIImages as _LegacyOpenAIImages
 
-if _OpenAIImages is not None:
-    # Keep the historical symbol name expected by routes
-    OpenAIImages = _OpenAIImages  # type: ignore[misc,assignment]
+        OpenAIImages = _LegacyOpenAIImages
+    except Exception:  # pragma: no cover
+        OpenAIImages = None
+
+if OpenAIImages is not None:
     __all__.append("OpenAIImages")
 
-
-# --- StabilityImages (optional provider) -------------------------------------
-
+# StabilityImages (optional) -------------------------------------------------
 try:
-    from .stability_provider import StabilityImages as _StabilityImages  # type: ignore
+    from .stability_provider import StabilityImages  # optional
 except Exception:  # pragma: no cover
-    _StabilityImages = None  # type: ignore[assignment]
+    StabilityImages = None  # type: ignore[assignment]
 
-if _StabilityImages is not None:
-    StabilityImages = _StabilityImages  # type: ignore[misc,assignment]
+if StabilityImages is not None:  # type: ignore[comparison-overlap]
     __all__.append("StabilityImages")
 
-# NOTE:
-# We intentionally do not import or expose any LLM providers here (e.g., ClaudeLLM,
-# OpenAILLM). Phase 11.1 focuses on image providers only, and dangling imports to
-# non-existent llm modules were breaking imports at app startup.
+# Nothing LLM-related is re-exported here on purpose.
