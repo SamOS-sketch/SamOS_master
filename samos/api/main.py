@@ -20,22 +20,22 @@ from samos.api.db import (
     Image as DBImage,
     Memory as DBMemory,
     Session as DBSession,
-    SessionLocal,
     init_db,
+    SessionLocal,
 )
 from samos.api.image.stub import StubProvider
 from samos.api.models import (
-        EMMCreateRequest,
-        EMMItem,
-        EMMListResponse,
-        ImageGenerateRequest,
-        ImageGenerateResponse,
-        MemoryItem,
-        MemoryListResponse,
-        MemoryPutRequest,
-        ModeGetResponse,
-        ModeSetRequest,
-        SessionStartResponse,
+    EMMCreateRequest,
+    EMMItem,
+    EMMListResponse,
+    ImageGenerateRequest,
+    ImageGenerateResponse,
+    MemoryItem,
+    MemoryListResponse,
+    MemoryPutRequest,
+    ModeGetResponse,
+    ModeSetRequest,
+    SessionStartResponse,
 )
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
