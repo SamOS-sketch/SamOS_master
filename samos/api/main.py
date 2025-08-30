@@ -1,40 +1,61 @@
 # samos/api/main.py
 from __future__ import annotations
 
-import os
 import json
+import os
+from collections import Counter
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from uuid import uuid4
-from collections import Counter
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-# --- SamOS config / safety ---
-from samos.config import settings, assert_persona_safety
+from samos.api.db import (
+    EMM as DBEMM,
+)
+from samos.api.db import (
+    Event as DBEvent,
+)
+from samos.api.db import (
+    Image as DBImage,
+)
+from samos.api.db import (
+    Memory as DBMemory,
+)
+from samos.api.db import (
+    Session as DBSession,
+)
+from samos.api.db import (
+    SessionLocal,
+    init_db,
+)
+from samos.api.image.stub import StubProvider
 
 # --- App models/db/providers/routes (existing imports) ---
 from samos.api.models import (
-    SessionStartResponse, ModeSetRequest, ModeGetResponse,
-    MemoryPutRequest, MemoryItem, MemoryListResponse,
-    EMMCreateRequest, EMMItem, EMMListResponse,
-    ImageGenerateRequest, ImageGenerateResponse,
+    EMMCreateRequest,
+    EMMItem,
+    EMMListResponse,
+    ImageGenerateRequest,
+    ImageGenerateResponse,
+    MemoryItem,
+    MemoryListResponse,
+    MemoryPutRequest,
+    ModeGetResponse,
+    ModeSetRequest,
+    SessionStartResponse,
 )
-from samos.api.db import (
-    SessionLocal, init_db,
-    Session as DBSession, Memory as DBMemory,
-    EMM as DBEMM, Image as DBImage, Event as DBEvent,
-)
-from samos.api.image.stub import StubProvider
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
 from samos.api.routes_snapshot import router as snapshot_router
 
-from samos.core.soulprint_loader import load_soulprint
+# --- SamOS config / safety ---
+from samos.config import assert_persona_safety, settings
 from samos.core.memory_agent import get_memory_agent
+from samos.core.soulprint_loader import load_soulprint
 
 # --------------------------
 # App & middleware

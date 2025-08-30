@@ -1,8 +1,9 @@
 from samos.core.soulprint import Soulprint
+from samos.memory.store import MemoryStore
 from samos.runtime.models import Context, UserMessage
 from samos.runtime.router import Router
 from samos.skills.echo import EchoSkill
-from samos.memory.store import MemoryStore
+
 
 def sp(tmp_path):
     p = tmp_path / "sp.yaml"

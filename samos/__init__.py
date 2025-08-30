@@ -1,6 +1,6 @@
 # samos/__init__.py
 try:
-    from ._version import version as __version__   # written at build time
+    from ._version import version as __version__  # written at build time
 except Exception:
     try:
         from importlib.metadata import version as _pkg_version

@@ -2,6 +2,7 @@ from samos.core.soulprint import Soulprint
 from samos.runtime.models import Context, UserMessage
 from samos.skills.echo import EchoSkill
 
+
 def test_echo_skill(tmp_path):
     p = tmp_path / "sp.yaml"
     p.write_text(

@@ -1,7 +1,8 @@
 from samos.core.soulprint import Soulprint
+from samos.memory.store import MemoryStore
 from samos.runtime.models import Context, UserMessage
 from samos.skills.memory_recall import MemoryRecallSkill
-from samos.memory.store import MemoryStore
+
 
 def test_memory_recall_returns_results(tmp_path):
     dbfile = tmp_path / "test.db"

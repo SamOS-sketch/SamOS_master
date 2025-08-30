@@ -3,6 +3,7 @@ from samos.runtime.models import Context, UserMessage
 from samos.runtime.router import Router
 from samos.skills.echo import EchoSkill
 
+
 def test_router_uses_echo_skill(tmp_path):
     p = tmp_path / "sp.yaml"
     p.write_text(

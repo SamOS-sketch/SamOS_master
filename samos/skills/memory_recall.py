@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from typing import Dict, List
-from samos.runtime.models import UserMessage, Response, Context
+
 from samos.memory.store import MemoryStore
+from samos.runtime.models import Context, Response, UserMessage
 
 Category = str
 

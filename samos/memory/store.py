@@ -1,9 +1,9 @@
 from __future__ import annotations
-import sqlite3
+
 import json
+import sqlite3
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Dict, Any, Iterable, Optional
+from typing import List
 
 DEFAULT_DB = "samos.db"
 

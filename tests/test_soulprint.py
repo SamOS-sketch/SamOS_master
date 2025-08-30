@@ -1,7 +1,10 @@
 import textwrap
 from pathlib import Path
+
 import pytest
+
 from samos.core.soulprint import Soulprint
+
 
 def _write(tmp_path: Path, content: str) -> str:
     p = tmp_path / "soulprint.yaml"

@@ -1,5 +1,6 @@
 # samos/api/utils/db_retry.py
 import time
+
 from sqlalchemy.exc import OperationalError
 
 

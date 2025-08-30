@@ -4,7 +4,8 @@
 # 1) Try the CWD (project root)
 # 2) Also force-load the .env that sits next to this file (samos/api/.env)
 from pathlib import Path
-from dotenv import load_dotenv, find_dotenv
+
+from dotenv import find_dotenv, load_dotenv
 
 # Load from working directory (e.g., C:\...\samos_phase4_scaffold\.env) if present
 load_dotenv(find_dotenv(usecwd=True))

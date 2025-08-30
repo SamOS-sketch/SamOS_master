@@ -2,6 +2,7 @@
 import os
 from enum import Enum
 
+
 class Persona(str, Enum):
     PRIVATE = "private"
     DEMO = "demo"

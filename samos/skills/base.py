@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from typing import Protocol
-from samos.runtime.models import UserMessage, Response, Context
+
+from samos.runtime.models import Context, Response, UserMessage
+
 
 class Skill(Protocol):
     name: str

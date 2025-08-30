@@ -1,7 +1,10 @@
 # samos/core/memory_agent.py
 from __future__ import annotations
-from typing import Optional, Dict, Any
-from .persona import get_persona, Persona
+
+from typing import Any, Dict, Optional
+
+from .persona import Persona, get_persona
+
 
 class MemoryAgent:
     """

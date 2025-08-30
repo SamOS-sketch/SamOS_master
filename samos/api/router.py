@@ -1,5 +1,6 @@
-import os, time
-from typing import Dict, Any
+import os
+import time
+from typing import Any, Dict
 
 # Try to use your existing event helpers if present; otherwise fallback to print.
 try:
@@ -16,12 +17,12 @@ except Exception:  # fallback no-op printers so this file works today
 
 # Provider registry
 from samos.api.providers import (
-    OpenAILLM,
     ClaudeLLM,
-    OpenAIImages,
-    StabilityImages,
     ComfyUIImages,
     LocalDiffusionImages,
+    OpenAIImages,
+    OpenAILLM,
+    StabilityImages,
     StubProvider,
 )
 

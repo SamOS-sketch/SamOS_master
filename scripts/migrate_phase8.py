@@ -1,5 +1,6 @@
 # scripts/migrate_phase8.py
 import os
+
 from sqlalchemy import create_engine, text
 
 # DB path: adjust if yours is elsewhere

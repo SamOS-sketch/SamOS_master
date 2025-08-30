@@ -1,5 +1,7 @@
 from pathlib import Path
+
 from samos.memory.store import MemoryStore
+
 
 def test_add_and_search_returns_results(tmp_path: Path):
     db = tmp_path / "test.db"

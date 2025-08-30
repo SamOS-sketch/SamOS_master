@@ -1,9 +1,10 @@
 # samos/core/soulprint_loader.py
 import os
-from typing import Tuple, Optional
+from typing import Optional, Tuple
+
 import yaml
 
-from .persona import get_persona, Persona
+from .persona import Persona, get_persona
 
 # places we'll look for the file name we choose
 CANDIDATES = [

@@ -1,6 +1,8 @@
 # Minimal example of a drop-in skill
 from __future__ import annotations
-from samos.runtime.models import UserMessage, Response, Context
+
+from samos.runtime.models import Context, Response, UserMessage
+
 
 class HelloSkill:
     name = "hello"

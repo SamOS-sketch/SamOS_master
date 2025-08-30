@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import re
 from typing import Dict
+
 from samos.memory.store import MemoryStore
-from samos.runtime.models import UserMessage, Response, Context
+from samos.runtime.models import Context, Response, UserMessage
 
 # Map known EMM numbers to short names (extend anytime)
 EMM_MAP: Dict[int, str] = {

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import text, bindparam
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session as OrmSession
 
 from samos.api.settings import SNAPSHOT_DIR

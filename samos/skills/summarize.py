@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import re
-from samos.runtime.models import UserMessage, Response, Context
+
+from samos.runtime.models import Context, Response, UserMessage
+
 
 class SummarizeSkill:
     name = "summarize"

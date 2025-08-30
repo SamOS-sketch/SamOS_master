@@ -1,4 +1,7 @@
-import base64, os, uuid, pathlib, datetime
+import base64
+import datetime
+import pathlib
+import uuid
 from typing import Tuple
 
 _GEN_DIR = pathlib.Path(__file__).resolve().parent.parent / "generated"

@@ -1,24 +1,22 @@
-from datetime import datetime
 import os
+from datetime import datetime
 
 from sqlalchemy import (
-    Column,
-    String,
-    Text,
-    DateTime,
-    Integer,
     Boolean,
+    Column,
+    DateTime,
     ForeignKey,
     Index,
+    Integer,
+    String,
+    Text,
     create_engine,
-    func,
     text,
 )
-from sqlalchemy.orm import relationship, declarative_base, sessionmaker
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 # Persona-aware DB routing
-from samos.core.persona import get_persona, db_filename
+from samos.core.persona import db_filename, get_persona
 
 # Keep import for compatibility, but persona routing will be used unless DATABASE_URL is set explicitly.
 try:

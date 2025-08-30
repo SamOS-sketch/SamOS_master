@@ -1,8 +1,9 @@
 from samos.core.soulprint import Soulprint
-from samos.runtime.models import Context, UserMessage, Response
+from samos.memory.store import MemoryStore
+from samos.runtime.models import Context, UserMessage
 from samos.runtime.router import Router
 from samos.skills.echo import EchoSkill
-from samos.memory.store import MemoryStore
+
 
 class _EchoThatRemembers(EchoSkill):
     # same echo, but asks router to remember the echoed text

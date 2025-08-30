@@ -1,4 +1,8 @@
-import io, os, re, yaml, pytest
+import os
+import re
+
+import pytest
+import yaml
 
 DEMO_FILE = "soulprint.demo.yaml"
 

@@ -1,6 +1,7 @@
 import json
-from typing import Optional, Dict
-from ..db import SessionLocal, Event
+from typing import Dict, Optional
+
+from ..db import Event, SessionLocal
 
 
 def record_event(

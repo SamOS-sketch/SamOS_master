@@ -1,7 +1,8 @@
 from samos.core.soulprint import Soulprint
+from samos.memory.store import MemoryStore
 from samos.runtime.models import Context, UserMessage
 from samos.skills.memory_recall import MemoryRecallSkill
-from samos.memory.store import MemoryStore
+
 
 def sp(tmp_path):
     p = tmp_path / "sp.yaml"

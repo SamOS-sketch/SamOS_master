@@ -1,4 +1,6 @@
-import os, uuid
+import os
+import uuid
+
 from .base import BaseImage
 
 

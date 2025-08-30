@@ -1,9 +1,12 @@
 from __future__ import annotations
-from typing import List, Optional, Dict, Any
-from samos.runtime.models import UserMessage, Response, Context
-from samos.skills.base import Skill
+
+from typing import Any, Dict, List, Optional
+
 from samos.memory.store import MemoryStore
 from samos.runtime.memory_agent import MemoryAgent
+from samos.runtime.models import Context, Response, UserMessage
+from samos.skills.base import Skill
+
 
 class Router:
     def __init__(self, skills: List[Skill], memory_store: Optional[MemoryStore] = None):
