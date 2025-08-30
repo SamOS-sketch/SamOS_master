@@ -14,8 +14,8 @@ router = APIRouter()
 
 # Default mode from env; can be switched via /session/mode
 DEFAULT_MODE = os.getenv("DEFAULT_MODE", "sandbox")
-- ROUTER = SamRouter(DEFAULT_MODE)
-+ ROUTER = SamRouter
+ROUTER = SamRouter(DEFAULT_MODE)
+ROUTER = SamRouter
 
 
 
