@@ -28,11 +28,7 @@ from samos.api.models import (
     EMMItem,
     EMMListResponse,
     ImageGenerateRequest,
-    ImageGenerateResponse,
-    MemoryItem,
-    ModeGetResponse,
-    ModeSetRequest,
-    SessionStartResponse,
+    ImageGenerateResponse,  # Remove this line
 )
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
