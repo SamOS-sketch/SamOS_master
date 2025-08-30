@@ -527,10 +527,12 @@ def export_emms(session_id: str = Query(...)):
 # Images
 # --------------------------
 
+# ---- Images ----
 @app.post("/image/generate", response_model=ImageGenerateResponse)
 def generate_image(req: ImageGenerateRequest):
     db = SessionLocal()
     try:
+        # validate session
         sess = db.query(DBSession).filter(DBSession.id == req.session_id).first()
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -538,12 +540,14 @@ def generate_image(req: ImageGenerateRequest):
         provider = get_provider()
         reference = getattr(req, "reference_image", None) or get_reference_image()
 
+        # ----- success path -----
         try:
             result = provider.generate(
                 session_id=req.session_id,
                 prompt=req.prompt,
                 reference_image=reference,
             )
+
             img = DBImage(
                 id=result["image_id"],
                 session_id=req.session_id,
@@ -554,48 +558,78 @@ def generate_image(req: ImageGenerateRequest):
                 status=result.get("status", "ok"),
                 meta_json=json.dumps(result.get("meta", {})),
             )
-            db.add(img); db.commit()
+            db.add(img)
+            db.commit()
+
             record_event(
-                "image.generate.ok", "Image created", req.session_id,
-                {"provider": result.get("provider"), "image_id": result.get("image_id")}
+                "image.generate.ok",
+                "Image created",
+                req.session_id,
+                {"provider": result.get("provider"), "image_id": result.get("image_id")},
             )
+
             _METRICS["image.ok"] += 1
             ts = _utc_now()
-_bump_buckets("image.fail", ts)
+            _bump_buckets("image.ok", ts)
 
             try:
-                if AGENT:
-                    AGENT.on_event(
-                        req.session_id, "image.generate.ok", "Image created",
-                        {"provider": result.get("provider")}
-                    )
+                AGENT.on_event(
+                    req.session_id,
+                    "image.generate.ok",
+                    "Image created",
+                    {"provider": result.get("provider")},
+                )
             except Exception:
                 pass
+
             return ImageGenerateResponse(**result)
 
+        # ----- failure path -----
         except Exception as e:
             emm = DBEMM(
-                session_id=req.session_id, type="OneBounce", message=str(e),
-                meta_json=json.dumps({"prompt": req.prompt})
+                session_id=req.session_id,
+                type="OneBounce",
+                message=str(e),
+                meta_json=json.dumps({"prompt": req.prompt}),
             )
-            db.add(emm); db.commit()
+            db.add(emm)
+            db.commit()
+
             img = DBImage(
-                id=str(uuid4()), session_id=req.session_id, prompt=req.prompt,
-                provider=getattr(provider, "name", "unknown"), url="",
-                reference_used=reference, status="failed",
+                id=str(uuid4()),
+                session_id=req.session_id,
+                prompt=req.prompt,
+                provider=getattr(provider, "name", "unknown"),
+                url="",
+                reference_used=reference,
+                status="failed",
                 meta_json=json.dumps({"error": str(e)}),
             )
-            db.add(img); db.commit()
-            record_event("image.generate.fail", "Image failed", req.session_id, {"error": str(e)})
+            db.add(img)
+            db.commit()
+
+            record_event(
+                "image.generate.fail",
+                "Image failed",
+                req.session_id,
+                {"error": str(e)},
+            )
+
             _METRICS["image.fail"] += 1
-           ts = _utc_now()
-_bump_buckets("image.ok", ts)
+            ts = _utc_now()
+            _bump_buckets("image.fail", ts)
 
             try:
-                if AGENT:
-                    AGENT.on_event(req.session_id, "image.generate.fail", "Image failed", {"error": str(e)})
+                AGENT.on_event(
+                    req.session_id,
+                    "image.generate.fail",
+                    "Image failed",
+                    {"error": str(e)},
+                )
             except Exception:
                 pass
+
             raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
+
     finally:
         db.close()

@@ -1,19 +1,13 @@
-# samos/api/providers/__init__.py
-
-# Image providers
+from .llm.claude_llm import ClaudeLLM
+from .llm.openai_llm import OpenAILLM
 from .openai_provider import OpenAIImages
 from .stability_provider import StabilityImages
 from .stub import StubProvider
 
-# LLM providers
-from .llm.claude_llm import ClaudeLLM
-from .llm.openai_llm import OpenAILLM
-
-# Make re-exports explicit so ruff doesn’t flag F401
 __all__ = [
+    "ClaudeLLM",
+    "OpenAILLM",
     "OpenAIImages",
     "StabilityImages",
     "StubProvider",
-    "ClaudeLLM",
-    "OpenAILLM",
 ]
