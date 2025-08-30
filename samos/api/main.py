@@ -1,6 +1,6 @@
 from __future__ import annotations
+import sys
 
-import json
 import os
 from collections import Counter
 from datetime import datetime, timezone
@@ -28,8 +28,8 @@ from samos.api.models import (
     EMMListResponse,
     ImageGenerateRequest,
     SessionStartResponse,
-    ModeSetRequest,  # Add this import
-    ModeGetResponse,  # Add this import
+    ModeSetRequest,  # Added import for ModeSetRequest
+    ModeGetResponse,  # Added import for ModeGetResponse
 )
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
@@ -80,7 +80,7 @@ def _make_openai_provider():
     return OpenAIProvider()
 
 
-_PROVIDER_FACTORIES: dict[str, callable] = {
+_PROVIDER_FACTORIES: dict[str, Callable[[], object]] = {
     "stub": lambda: StubProvider(),
     "openai": _make_openai_provider,
     "comfyui": lambda: _ComfyUIStub(),
@@ -117,7 +117,7 @@ async def _startup() -> None:
     # DB init (prefer URL argument; fall back to env for older init_db)
     db_url = settings.resolved_db_url()
     try:
-        init_db(db_url)  # type: ignore[arg-type]
+        init_db(db_url)  # type: ignore[call-arg]  # tolerate older init_db signature
     except TypeError:
         os.environ["DB_URL"] = db_url
         init_db()
@@ -317,5 +317,70 @@ def list_events(
             }
             for r in rows
         ]
+    finally:
+        db.close()
+
+
+@app.get("/events/export")
+def export_events(
+    session_id: Optional[str] = Query(None),
+    kind: Optional[str] = Query(None),
+    since: Optional[str] = Query(None),
+    until: Optional[str] = Query(None),
+    limit: int = Query(1000, gt=1, le=2000),
+):
+    return list_events(session_id=session_id, kind=kind, since=since, until=until, limit=limit)
+
+
+# -----------------------------------------------------------------------------
+# Sessions
+# -----------------------------------------------------------------------------
+
+@app.post("/session/start", response_model=SessionStartResponse)
+def start_session():
+    db = SessionLocal()
+    try:
+        sid = str(uuid4())
+        sess = DBSession(id=sid, mode=DEFAULT_MODE)
+        db.add(sess)
+        db.commit()
+
+        record_event("session.start", "Session created", sid, {"mode": sess.mode})
+        try:
+            if AGENT:
+                AGENT.on_session_start(sid, sess.mode)
+                AGENT.on_event(sid, "session.start", "Session created", {"mode": sess.mode})
+        except Exception:  # noqa: BLE001
+            pass
+
+        return SessionStartResponse(session_id=sid, mode=sess.mode)
+    finally:
+        db.close()
+
+
+@app.get("/session/mode", response_model=ModeGetResponse)
+def get_mode(session_id: str = Query(...)):
+    db = SessionLocal()
+    try:
+        sess = db.query(DBSession).filter(DBSession.id == session_id).first()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return ModeGetResponse(session_id=session_id, mode=sess.mode)
+    finally:
+        db.close()
+
+
+@app.post("/session/mode", response_model=ModeGetResponse)
+def set_mode(req: ModeSetRequest):
+    db = SessionLocal()
+    try:
+        sess = db.query(DBSession).filter(DBSession.id == req.session_id).first()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Session not found")
+        sess.mode = req.mode
+        db.add(sess)
+        db.commit()
+
+        return ModeGetResponse(session_id=req.session_id, mode=sess.mode)
     finally:
         db.close()
