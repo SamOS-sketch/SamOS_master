@@ -18,10 +18,10 @@ from samos.api.db import (
     EMM as DBEMM,
     Event as DBEvent,
     Image as DBImage,
+    init_db,
     Memory as DBMemory,
     Session as DBSession,
     SessionLocal,
-    init_db,
 )
 from samos.api.image.stub import StubProvider
 from samos.api.models import (
