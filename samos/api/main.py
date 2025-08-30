@@ -16,12 +16,22 @@ from sqlalchemy import text
 
 from samos.api.db import (
     EMM as DBEMM,
+)
+from samos.api.db import (
     Event as DBEvent,
+)
+from samos.api.db import (
     Image as DBImage,
+)
+from samos.api.db import (
     Memory as DBMemory,
+)
+from samos.api.db import (
     Session as DBSession,
-    init_db,
+)
+from samos.api.db import (
     SessionLocal,
+    init_db,
 )
 from samos.api.image.stub import StubProvider
 from samos.api.models import (
@@ -83,13 +93,14 @@ class _ComfyUIStub(StubProvider):
 
 def _make_openai_provider():
     from samos.api.image.openai_provider import OpenAIProvider
+
     return OpenAIProvider()
 
 
 _PROVIDER_FACTORIES: dict[str, Callable[[], object]] = {
-    "comfyui": lambda: _ComfyUIStub(),
-    "openai": _make_openai_provider,
     "stub": lambda: StubProvider(),
+    "openai": _make_openai_provider,
+    "comfyui": lambda: _ComfyUIStub(),
 }
 _PROVIDER_CACHE: dict[str, object] = {}
 
@@ -123,7 +134,7 @@ async def _startup() -> None:
     # DB init (prefer URL argument; fall back to env for older init_db)
     db_url = settings.resolved_db_url()
     try:
-        init_db(db_url)  # type: ignore
+        init_db(db_url)  # type: ignore[arg-type]  # older signature support
     except TypeError:
         os.environ["DB_URL"] = db_url
         init_db()
@@ -535,4 +546,146 @@ def list_emms(session_id: str = Query(...), limit: int = Query(50)):
                     id=r.id,
                     type=r.type,
                     message=r.message,
-                    met
+                    meta=json.loads(r.meta_json or "{}"),
+                    created_at=r.created_at.isoformat() + "Z",
+                )
+                for r in rows
+            ]
+        )
+    finally:
+        db.close()
+
+
+@app.get("/emm/export", response_model=EMMListResponse)
+def export_emms(session_id: str = Query(...)):
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(DBEMM)
+            .filter(DBEMM.session_id == session_id)
+            .order_by(DBEMM.id.asc())
+            .all()
+        )
+        return EMMListResponse(
+            items=[
+                EMMItem(
+                    id=r.id,
+                    type=r.type,
+                    message=r.message,
+                    meta=json.loads(r.meta_json or "{}"),
+                    created_at=r.created_at.isoformat() + "Z",
+                )
+                for r in rows
+            ]
+        )
+    finally:
+        db.close()
+
+
+# -----------------------------------------------------------------------------
+# Images
+# -----------------------------------------------------------------------------
+
+@app.post("/image/generate", response_model=ImageGenerateResponse)
+def generate_image(req: ImageGenerateRequest):
+    db = SessionLocal()
+    try:
+        sess = db.query(DBSession).filter(DBSession.id == req.session_id).first()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        provider = _get_provider()
+        reference = getattr(req, "reference_image", None) or _reference_image()
+
+        # try success path
+        try:
+            result = provider.generate(
+                session_id=req.session_id,
+                prompt=req.prompt,
+                reference_image=reference,
+            )
+
+            img = DBImage(
+                id=result["image_id"],
+                session_id=req.session_id,
+                prompt=req.prompt,
+                provider=result["provider"],
+                url=result["url"],
+                reference_used=result["reference_used"],
+                status=result.get("status", "ok"),
+                meta_json=json.dumps(result.get("meta", {})),
+            )
+            db.add(img)
+            db.commit()
+
+            record_event(
+                "image.generate.ok",
+                "Image created",
+                req.session_id,
+                {"provider": result.get("provider"), "image_id": result.get("image_id")},
+            )
+
+            _METRICS["image.ok"] += 1
+            _bump_buckets("image.ok", _utc_now())
+
+            try:
+                if AGENT:
+                    AGENT.on_event(
+                        req.session_id,
+                        "image.generate.ok",
+                        "Image created",
+                        {"provider": result.get("provider")},
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+            return ImageGenerateResponse(**result)
+
+        # on failure: record EMM + failed image row, then raise 500
+        except Exception as e:  # noqa: BLE001
+            emm = DBEMM(
+                session_id=req.session_id,
+                type="OneBounce",
+                message=str(e),
+                meta_json=json.dumps({"prompt": req.prompt}),
+            )
+            db.add(emm)
+            db.commit()
+
+            img = DBImage(
+                id=str(uuid4()),
+                session_id=req.session_id,
+                prompt=req.prompt,
+                provider=getattr(provider, "name", "unknown"),
+                url="",
+                reference_used=reference,
+                status="failed",
+                meta_json=json.dumps({"error": str(e)}),
+            )
+            db.add(img)
+            db.commit()
+
+            record_event(
+                "image.generate.fail",
+                "Image failed",
+                req.session_id,
+                {"error": str(e)},
+            )
+
+            _METRICS["image.fail"] += 1
+            _bump_buckets("image.fail", _utc_now())
+
+            try:
+                if AGENT:
+                    AGENT.on_event(
+                        req.session_id,
+                        "image.generate.fail",
+                        "Image failed",
+                        {"error": str(e)},
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+            raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
+    finally:
+        db.close()
