@@ -1,19 +1,22 @@
+# tests/test_smoke.py
+
+import importlib
 import os
 import sys
-import importlib
+
 from fastapi.testclient import TestClient
 
 # --- Test Environment Setup ---
 os.environ["SAMOS_PERSONA"] = "demo"
 os.environ.pop("SOULPRINT_PATH", None)
 
-# Ensure modules re-read env
+# Ensure modules re-read env (so app reads fresh env each test run)
 if "samos.config" in sys.modules:
     importlib.reload(sys.modules["samos.config"])
 if "samos.api.main" in sys.modules:
     importlib.reload(sys.modules["samos.api.main"])
 
-from samos.api.main import app  # noqa: E402
+from samos.api.main import app  # noqa: E402  (import after env setup is intentional)
 
 client = TestClient(app)
 
@@ -25,7 +28,7 @@ def test_health_reports_demo_soulprint():
     assert data["status"] == "ok"
     sp = str(data.get("soulprint_path", ""))
     # Accept either the actual demo file or UNAVAILABLE (when not present in test env)
-    assert (sp.endswith("soulprint.demo.yaml")) or (sp.upper() == "UNAVAILABLE")
+    assert sp.endswith("soulprint.demo.yaml") or (sp.upper() == "UNAVAILABLE")
     assert isinstance(data.get("provider"), str)
 
 
