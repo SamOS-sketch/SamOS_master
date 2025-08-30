@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ "**" ]
+    branches: ["**"]
   pull_request:
 
 jobs:
@@ -24,11 +24,17 @@ jobs:
           # belt-and-braces to avoid 'command not found'
           python -m pip install ruff mypy
 
+      - name: Show environment (debug)
+        run: |
+          python -V
+          python -c "import sys; print(sys.executable)"
+          python -m pip freeze | sed -n '1,120p'
+
       - name: Lint (ruff)
-        run: ruff check .
+        run: python -m ruff check .
 
       - name: Type-check (mypy)
-        run: mypy .
+        run: python -m mypy .
 
       - name: Run tests
-        run: pytest -q --disable-warnings
+        run: python -m pytest -q --disable-warnings
