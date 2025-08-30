@@ -133,8 +133,8 @@ async def _startup() -> None:
 
     # DB init (prefer URL argument; fall back to env for older init_db)
     db_url = settings.resolved_db_url()
-    try:
-        init_db(db_url)  # type: ignore[arg-type]  # older signature support
+        try:
+        init_db(db_url)  # type: ignore[call-arg]  # older signature support
     except TypeError:
         os.environ["DB_URL"] = db_url
         init_db()
