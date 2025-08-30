@@ -16,10 +16,20 @@ from sqlalchemy import text
 
 from samos.api.db import (
     EMM as DBEMM,
+)
+from samos.api.db import (
     Event as DBEvent,
+)
+from samos.api.db import (
     Image as DBImage,
+)
+from samos.api.db import (
     Memory as DBMemory,
+)
+from samos.api.db import (
     Session as DBSession,
+)
+from samos.api.db import (
     SessionLocal,
     init_db,
 )
