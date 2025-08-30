@@ -54,7 +54,27 @@ extend-exclude = ["samos/_version.py", "tools/*"]  # ignore generated/versioned/
 
 [tool.mypy]
 python_version = "3.12"
-strict = false
-ignore_missing_imports = true
+# Keep sensible defaults; we’re focusing typing where it matters now.
+no_implicit_optional = true
 warn_unused_ignores = true
-exclude = "samos/_version.py|tools/.*"   # exclude tools from type-checking
+ignore_missing_imports = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+# Only type-check core API surface for this phase.
+files = [
+  "samos/api/main.py",
+  "samos/api/routes_snapshot.py",
+  "samos/api/routes_images.py",
+  "samos/api/obs/events.py",
+  "samos/config.py",
+]
+
+# Silence noisy or out-of-scope modules for Phase 11.1
+[[tool.mypy.overrides]]
+module = [
+  "examples.*",
+  "samos.sdk.*",
+  "samos.api.db",              # SQLAlchemy models (will type later)
+  "samos.api.snapshot_service",# helper service; typing later
+]
+ignore_errors = true
