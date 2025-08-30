@@ -1,5 +1,5 @@
-# samos/api/main.py
 from __future__ import annotations
+import sys
 
 import os
 from collections import Counter
@@ -26,11 +26,7 @@ from samos.api.models import (
     EMMCreateRequest,
     EMMItem,
     EMMListResponse,
-    ImageGenerateResponse,
-    MemoryListResponse,
-    MemoryPutRequest,
-    ModeGetResponse,
-    ModeSetRequest,
+    ImageGenerateRequest,
     SessionStartResponse,
 )
 from samos.api.obs.events import record_event
@@ -40,9 +36,9 @@ from samos.config import assert_persona_safety, settings
 from samos.core.memory_agent import get_memory_agent
 from samos.core.soulprint_loader import load_soulprint
 
-# -----------------------------------------------------------------------------#
-# App & middleware
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# App & middleware 
+# ----------------------------------------------------------------------------- 
 
 app = FastAPI(title="SamOS API (Phase 11.1)")
 
@@ -68,9 +64,9 @@ SOULPRINT: dict | object = {}
 SOULPRINT_PATH: str = "UNAVAILABLE"
 AGENT = None  # MemoryAgent
 
-# -----------------------------------------------------------------------------#
-# Providers (feature-flagged; lazy import to avoid optional deps at import time)
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# Providers (feature-flagged; lazy import to avoid optional deps at import time) 
+# ----------------------------------------------------------------------------- 
 
 class _ComfyUIStub(StubProvider):
     """Placeholder so IMAGE_PROVIDER=comfyui still works on machines without ComfyUI."""
@@ -105,9 +101,9 @@ def _reference_image(default_fallback: str = "ref_alpha.jpg") -> str:
     return os.getenv("REFERENCE_IMAGE_ALPHA", "") or default_fallback
 
 
-# -----------------------------------------------------------------------------#
-# Startup: persona safety → DB init → soulprint → agent
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# Startup: persona safety → DB init → soulprint → agent 
+# ----------------------------------------------------------------------------- 
 
 @app.on_event("startup")
 async def _startup() -> None:
@@ -140,9 +136,9 @@ async def _startup() -> None:
         print(f"[SamOS] MemoryAgent init error: {e}")
 
 
-# -----------------------------------------------------------------------------#
-# Helpers
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# Helpers 
+# ----------------------------------------------------------------------------- 
 
 DEFAULT_MODE = os.getenv("SAM_MODE_DEFAULT", "work")
 
@@ -202,9 +198,9 @@ def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
     return datetime.fromisoformat(dt.rstrip("Z"))
 
 
-# -----------------------------------------------------------------------------#
-# Health & metrics
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# Health & metrics 
+# ----------------------------------------------------------------------------- 
 
 @app.get("/health")
 def health():
@@ -282,9 +278,9 @@ async def metrics_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# -----------------------------------------------------------------------------#
-# Events
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# Events 
+# ----------------------------------------------------------------------------- 
 
 @app.get("/events")
 def list_events(
@@ -334,9 +330,9 @@ def export_events(
     return list_events(session_id=session_id, kind=kind, since=since, until=until, limit=limit)
 
 
-# -----------------------------------------------------------------------------#
-# Sessions
-# -----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------- 
+# Sessions 
+# ----------------------------------------------------------------------------- 
 
 @app.post("/session/start", response_model=SessionStartResponse)
 def start_session():
