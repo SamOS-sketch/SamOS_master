@@ -560,7 +560,9 @@ def generate_image(req: ImageGenerateRequest):
                 {"provider": result.get("provider"), "image_id": result.get("image_id")}
             )
             _METRICS["image.ok"] += 1
-            ts = _utc_now(); _bump_buckets("image.ok", ts)
+            ts = _utc_now()
+_bump_buckets("image.fail", ts)
+
             try:
                 if AGENT:
                     AGENT.on_event(
@@ -586,7 +588,9 @@ def generate_image(req: ImageGenerateRequest):
             db.add(img); db.commit()
             record_event("image.generate.fail", "Image failed", req.session_id, {"error": str(e)})
             _METRICS["image.fail"] += 1
-            ts = _utc_now(); _bump_buckets("image.fail", ts)
+           ts = _utc_now()
+_bump_buckets("image.ok", ts)
+
             try:
                 if AGENT:
                     AGENT.on_event(req.session_id, "image.generate.fail", "Image failed", {"error": str(e)})

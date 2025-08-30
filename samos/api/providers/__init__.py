@@ -9,7 +9,7 @@ from .stub import StubProvider
 from .llm.claude_llm import ClaudeLLM
 from .llm.openai_llm import OpenAILLM
 
-# Make the re-exports explicit so ruff doesn't flag F401
+# Make re-exports explicit so ruff doesn’t flag F401
 __all__ = [
     "OpenAIImages",
     "StabilityImages",
