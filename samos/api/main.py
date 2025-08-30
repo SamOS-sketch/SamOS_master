@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -85,10 +86,10 @@ def _make_openai_provider():
     return OpenAIProvider()
 
 
-_PROVIDER_FACTORIES: dict[str, callable] = {
-    "stub": lambda: StubProvider(),
-    "openai": _make_openai_provider,
+_PROVIDER_FACTORIES: dict[str, Callable[[], object]] = {
     "comfyui": lambda: _ComfyUIStub(),
+    "openai": _make_openai_provider,
+    "stub": lambda: StubProvider(),
 }
 _PROVIDER_CACHE: dict[str, object] = {}
 
