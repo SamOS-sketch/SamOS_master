@@ -43,53 +43,49 @@ from samos.config import assert_persona_safety, settings
 from samos.core.memory_agent import get_memory_agent
 from samos.core.soulprint_loader import load_soulprint
 
-
-# --------------------------
+# -----------------------------------------------------------------------------
 # App & middleware
-# --------------------------
+# -----------------------------------------------------------------------------
 
-app = FastAPI(title="SamOS API (Phase 11 RC1)")
+app = FastAPI(title="SamOS API (Phase 11.1)")
 
-# CORS: default to same-origin; allow comma-separated overrides via env
-allow_origins = settings.cors_origins or []
-if allow_origins:
+# CORS from settings (comma-separated list already parsed in settings.cors_origins)
+if settings.cors_origins:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allow_origins,
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-# Routes
+# Mount routers
 app.include_router(snapshot_router)
 app.include_router(image_router)
 
-# In-memory metrics
-_METRICS = Counter()
+# In-memory counters
+_METRICS: Counter[str] = Counter()
 
-# Globals filled on startup
+# Globals filled during startup
 SOULPRINT: dict | object = {}
 SOULPRINT_PATH: str = "UNAVAILABLE"
-AGENT = None  # MemoryAgent instance
+AGENT = None  # MemoryAgent
 
-
-# --------------------------
-# Providers (feature-flagged)
-# --------------------------
-
-def _make_openai_provider():
-    from samos.api.image.openai_provider import OpenAIProvider
-
-    return OpenAIProvider()
-
+# -----------------------------------------------------------------------------
+# Providers (feature-flagged; lazy import to avoid optional deps at import time)
+# -----------------------------------------------------------------------------
 
 class _ComfyUIStub(StubProvider):
-    """Placeholder so IMAGE_PROVIDER=comfyui still works on CPU machines."""
+    """Placeholder so IMAGE_PROVIDER=comfyui still works on machines without ComfyUI."""
     name = "comfyui-stub"
 
 
-_PROVIDER_FACTORIES = {
+def _make_openai_provider():
+    from samos.api.image.openai_provider import OpenAIProvider
+    return OpenAIProvider()
+
+
+_PROVIDER_FACTORIES: dict[str, callable] = {
     "stub": lambda: StubProvider(),
     "openai": _make_openai_provider,
     "comfyui": lambda: _ComfyUIStub(),
@@ -97,8 +93,8 @@ _PROVIDER_FACTORIES = {
 _PROVIDER_CACHE: dict[str, object] = {}
 
 
-def get_provider():
-    name = settings.IMAGE_PROVIDER.lower()
+def _get_provider():
+    name = (settings.IMAGE_PROVIDER or "stub").lower()
     factory = _PROVIDER_FACTORIES.get(name)
     if not factory:
         raise HTTPException(status_code=500, detail=f"Unknown IMAGE_PROVIDER: {name}")
@@ -107,48 +103,49 @@ def get_provider():
     return _PROVIDER_CACHE[name]
 
 
-def get_reference_image(default_fallback: str = "ref_alpha.jpg") -> str:
-    return os.getenv("REFERENCE_IMAGE_ALPHA", default_fallback)
+def _reference_image(default_fallback: str = "ref_alpha.jpg") -> str:
+    # Keep env override for backward-compat
+    return os.getenv("REFERENCE_IMAGE_ALPHA", "") or default_fallback
 
 
-# --------------------------
-# Startup: DB + Soulprint + Agent, with safety guard
-# --------------------------
+# -----------------------------------------------------------------------------
+# Startup: persona safety → DB init → soulprint → agent
+# -----------------------------------------------------------------------------
 
 @app.on_event("startup")
-async def _startup():
+async def _startup() -> None:
     global SOULPRINT, SOULPRINT_PATH, AGENT
 
-    # Enforce persona safety before touching anything sensitive
+    # Persona guard (reads env/settings and can raise)
     assert_persona_safety()
 
-    # Init DB with persona-aware URL
+    # DB init (prefer URL argument; fall back to env for older init_db)
     db_url = settings.resolved_db_url()
     try:
-        init_db(db_url)  # preferred if your init_db accepts a URL
+        init_db(db_url)  # type: ignore[arg-type]
     except TypeError:
-        os.environ["DB_URL"] = db_url  # fallback: some versions read from env
+        os.environ["DB_URL"] = db_url
         init_db()
 
-    # Load soulprint (your loader already resolves persona/env internally)
+    # Soulprint (path & parsed object)
     try:
         SOULPRINT, SOULPRINT_PATH = load_soulprint()
         print(f"[SamOS] Soulprint: {SOULPRINT_PATH}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         SOULPRINT, SOULPRINT_PATH = {}, "UNAVAILABLE"
         print(f"[SamOS] Soulprint load error: {e}")
 
-    # MemoryAgent
+    # Memory agent (optional)
     try:
         AGENT = get_memory_agent()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         AGENT = None
         print(f"[SamOS] MemoryAgent init error: {e}")
 
 
-# --------------------------
+# -----------------------------------------------------------------------------
 # Helpers
-# --------------------------
+# -----------------------------------------------------------------------------
 
 DEFAULT_MODE = os.getenv("SAM_MODE_DEFAULT", "work")
 
@@ -173,25 +170,25 @@ def _bump_bucket(metric: str, period: str, ts: datetime, inc: int = 1) -> None:
         row = db.execute(
             text(
                 "SELECT id FROM metrics_buckets "
-                "WHERE metric=:m AND period=:p AND bucket_start=:bs"
+                "WHERE metric = :m AND period = :p AND bucket_start = :bs"
             ),
             {"m": metric, "p": period, "bs": bs},
         ).fetchone()
         if row:
             db.execute(
-                text("UPDATE metrics_buckets SET value = value + :inc WHERE id=:id"),
+                text("UPDATE metrics_buckets SET value = value + :inc WHERE id = :id"),
                 {"inc": inc, "id": row[0]},
             )
         else:
             db.execute(
                 text(
                     "INSERT INTO metrics_buckets (metric, period, bucket_start, value) "
-                    "VALUES (:m,:p,:bs,:v)"
+                    "VALUES (:m, :p, :bs, :v)"
                 ),
                 {"m": metric, "p": period, "bs": bs, "v": inc},
             )
         db.commit()
-    except Exception:
+    except Exception:  # noqa: BLE001
         db.rollback()
     finally:
         db.close()
@@ -202,15 +199,19 @@ def _bump_buckets(metric: str, ts: datetime, inc: int = 1) -> None:
     _bump_bucket(metric, "day", ts, inc)
 
 
-# --------------------------
-# Health & Metrics
-# --------------------------
+def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
+    if not dt:
+        return None
+    return datetime.fromisoformat(dt.rstrip("Z"))
+
+
+# -----------------------------------------------------------------------------
+# Health & metrics
+# -----------------------------------------------------------------------------
 
 @app.get("/health")
 def health():
-    sp_name = None
-    if isinstance(SOULPRINT, dict):
-        sp_name = SOULPRINT.get("name")
+    sp_name = SOULPRINT.get("name") if isinstance(SOULPRINT, dict) else None
     return {
         "status": "ok",
         "provider": settings.IMAGE_PROVIDER,
@@ -229,10 +230,8 @@ def metrics():
 def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
     before = dict(_METRICS)
     _METRICS.clear()
-
     deleted_buckets = 0
     deleted_counters = 0
-
     if also_buckets or also_counters_table:
         db = SessionLocal()
         try:
@@ -243,7 +242,7 @@ def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
                 res2 = db.execute(text("DELETE FROM metrics_counters"))
                 deleted_counters = getattr(res2, "rowcount", 0)
             db.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001
             db.rollback()
         finally:
             db.close()
@@ -261,7 +260,7 @@ def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
                 "before": before,
             },
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     return {
@@ -276,7 +275,6 @@ def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
     }
 
 
-# ---- Request counter middleware ----
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
     ts = _utc_now()
@@ -287,15 +285,9 @@ async def metrics_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# --------------------------
+# -----------------------------------------------------------------------------
 # Events
-# --------------------------
-
-def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
-    if not dt:
-        return None
-    return datetime.fromisoformat(dt.rstrip("Z"))
-
+# -----------------------------------------------------------------------------
 
 @app.get("/events")
 def list_events(
@@ -312,14 +304,12 @@ def list_events(
             q = q.filter(DBEvent.session_id == session_id)
         if kind:
             q = q.filter(DBEvent.kind == kind)
-
         sdt = _parse_iso(since)
         edt = _parse_iso(until)
         if sdt:
             q = q.filter(DBEvent.ts >= sdt)
         if edt:
             q = q.filter(DBEvent.ts <= edt)
-
         rows = q.order_by(DBEvent.id.desc()).limit(limit).all()
         return [
             {
@@ -344,18 +334,12 @@ def export_events(
     until: Optional[str] = Query(None),
     limit: int = Query(1000, gt=1, le=2000),
 ):
-    return list_events(
-        session_id=session_id,
-        kind=kind,
-        since=since,
-        until=until,
-        limit=limit,
-    )
+    return list_events(session_id=session_id, kind=kind, since=since, until=until, limit=limit)
 
 
-# --------------------------
+# -----------------------------------------------------------------------------
 # Sessions
-# --------------------------
+# -----------------------------------------------------------------------------
 
 @app.post("/session/start", response_model=SessionStartResponse)
 def start_session():
@@ -367,12 +351,11 @@ def start_session():
         db.commit()
 
         record_event("session.start", "Session created", sid, {"mode": sess.mode})
-
         try:
             if AGENT:
                 AGENT.on_session_start(sid, sess.mode)
                 AGENT.on_event(sid, "session.start", "Session created", {"mode": sess.mode})
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         return SessionStartResponse(session_id=sid, mode=sess.mode)
@@ -399,17 +382,15 @@ def set_mode(req: ModeSetRequest):
         sess = db.query(DBSession).filter(DBSession.id == req.session_id).first()
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
-
         sess.mode = req.mode
         db.add(sess)
         db.commit()
 
         record_event("mode.set", "Mode set", req.session_id, {"mode": sess.mode})
-
         try:
             if AGENT:
                 AGENT.on_event(req.session_id, "mode.set", "Mode set", {"mode": sess.mode})
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         return ModeGetResponse(session_id=req.session_id, mode=sess.mode)
@@ -417,9 +398,9 @@ def set_mode(req: ModeSetRequest):
         db.close()
 
 
-# --------------------------
+# -----------------------------------------------------------------------------
 # Memory
-# --------------------------
+# -----------------------------------------------------------------------------
 
 @app.post("/memory")
 def put_memory(req: MemoryPutRequest):
@@ -434,7 +415,6 @@ def put_memory(req: MemoryPutRequest):
             .filter(DBMemory.session_id == req.session_id, DBMemory.key == req.key)
             .first()
         )
-
         if not item:
             item = DBMemory(
                 session_id=req.session_id,
@@ -450,11 +430,10 @@ def put_memory(req: MemoryPutRequest):
         db.commit()
 
         record_event("memory.put", "Memory saved", req.session_id, {"key": req.key})
-
         try:
             if AGENT:
                 AGENT.on_insight(req.session_id, req.key, req.value)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         return {"ok": True}
@@ -505,9 +484,9 @@ def list_memory(session_id: str = Query(...)):
         db.close()
 
 
-# --------------------------
+# -----------------------------------------------------------------------------
 # EMM
-# --------------------------
+# -----------------------------------------------------------------------------
 
 @app.post("/emm")
 def create_emm(req: EMMCreateRequest):
@@ -527,11 +506,10 @@ def create_emm(req: EMMCreateRequest):
         db.commit()
 
         record_event("emm.create", "EMM created", req.session_id, {"type": req.type})
-
         try:
             if AGENT:
                 AGENT.on_emm(req.session_id, req.type, req.message)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         return {"ok": True, "id": e.id}
@@ -592,23 +570,22 @@ def export_emms(session_id: str = Query(...)):
         db.close()
 
 
-# --------------------------
+# -----------------------------------------------------------------------------
 # Images
-# --------------------------
+# -----------------------------------------------------------------------------
 
 @app.post("/image/generate", response_model=ImageGenerateResponse)
 def generate_image(req: ImageGenerateRequest):
     db = SessionLocal()
     try:
-        # validate session
         sess = db.query(DBSession).filter(DBSession.id == req.session_id).first()
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        provider = get_provider()
-        reference = getattr(req, "reference_image", None) or get_reference_image()
+        provider = _get_provider()
+        reference = getattr(req, "reference_image", None) or _reference_image()
 
-        # ----- success path -----
+        # try success path
         try:
             result = provider.generate(
                 session_id=req.session_id,
@@ -637,8 +614,7 @@ def generate_image(req: ImageGenerateRequest):
             )
 
             _METRICS["image.ok"] += 1
-            ts = _utc_now()
-            _bump_buckets("image.ok", ts)
+            _bump_buckets("image.ok", _utc_now())
 
             try:
                 if AGENT:
@@ -648,13 +624,13 @@ def generate_image(req: ImageGenerateRequest):
                         "Image created",
                         {"provider": result.get("provider")},
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
             return ImageGenerateResponse(**result)
 
-        # ----- failure path -----
-        except Exception as e:
+        # on failure: record EMM + failed image row, then raise 500
+        except Exception as e:  # noqa: BLE001
             emm = DBEMM(
                 session_id=req.session_id,
                 type="OneBounce",
@@ -685,8 +661,7 @@ def generate_image(req: ImageGenerateRequest):
             )
 
             _METRICS["image.fail"] += 1
-            ts = _utc_now()
-            _bump_buckets("image.fail", ts)
+            _bump_buckets("image.fail", _utc_now())
 
             try:
                 if AGENT:
@@ -696,10 +671,9 @@ def generate_image(req: ImageGenerateRequest):
                         "Image failed",
                         {"error": str(e)},
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
             raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
-
     finally:
         db.close()
