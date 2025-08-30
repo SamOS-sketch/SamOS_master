@@ -28,11 +28,9 @@ from samos.api.models import (
     EMMItem,
     EMMListResponse,
     ImageGenerateRequest,
-    MemoryItem,
-    MemoryListResponse,
-    MemoryPutRequest,
-    ModeGetResponse,  # Re-added import
-    ModeSetRequest,   # Re-added import
+    MemoryItem,  # Keeping only necessary imports
+    ModeGetResponse,  # Required for routes
+    ModeSetRequest,   # Required for routes
     SessionStartResponse,
 )
 from samos.api.obs.events import record_event
@@ -395,3 +393,4 @@ def set_mode(req: ModeSetRequest):
         return ModeGetResponse(session_id=req.session_id, mode=sess.mode)
     finally:
         db.close()
+
