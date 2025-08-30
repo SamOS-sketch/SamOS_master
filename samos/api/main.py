@@ -1,6 +1,6 @@
 from __future__ import annotations
-import sys
 
+import json
 import os
 from collections import Counter
 from datetime import datetime, timezone
@@ -28,6 +28,8 @@ from samos.api.models import (
     EMMListResponse,
     ImageGenerateRequest,
     SessionStartResponse,
+    ModeSetRequest,  # Add this import
+    ModeGetResponse,  # Add this import
 )
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
@@ -36,9 +38,9 @@ from samos.config import assert_persona_safety, settings
 from samos.core.memory_agent import get_memory_agent
 from samos.core.soulprint_loader import load_soulprint
 
-# ----------------------------------------------------------------------------- 
-# App & middleware 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
+# App & middleware
+# -----------------------------------------------------------------------------
 
 app = FastAPI(title="SamOS API (Phase 11.1)")
 
@@ -64,9 +66,9 @@ SOULPRINT: dict | object = {}
 SOULPRINT_PATH: str = "UNAVAILABLE"
 AGENT = None  # MemoryAgent
 
-# ----------------------------------------------------------------------------- 
-# Providers (feature-flagged; lazy import to avoid optional deps at import time) 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
+# Providers (feature-flagged; lazy import to avoid optional deps at import time)
+# -----------------------------------------------------------------------------
 
 class _ComfyUIStub(StubProvider):
     """Placeholder so IMAGE_PROVIDER=comfyui still works on machines without ComfyUI."""
@@ -78,7 +80,7 @@ def _make_openai_provider():
     return OpenAIProvider()
 
 
-_PROVIDER_FACTORIES: dict[str, Callable[[], object]] = {
+_PROVIDER_FACTORIES: dict[str, callable] = {
     "stub": lambda: StubProvider(),
     "openai": _make_openai_provider,
     "comfyui": lambda: _ComfyUIStub(),
@@ -101,9 +103,9 @@ def _reference_image(default_fallback: str = "ref_alpha.jpg") -> str:
     return os.getenv("REFERENCE_IMAGE_ALPHA", "") or default_fallback
 
 
-# ----------------------------------------------------------------------------- 
-# Startup: persona safety → DB init → soulprint → agent 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
+# Startup: persona safety → DB init → soulprint → agent
+# -----------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def _startup() -> None:
@@ -115,7 +117,7 @@ async def _startup() -> None:
     # DB init (prefer URL argument; fall back to env for older init_db)
     db_url = settings.resolved_db_url()
     try:
-        init_db(db_url)  # type: ignore[call-arg]  # tolerate older init_db signature
+        init_db(db_url)  # type: ignore[arg-type]
     except TypeError:
         os.environ["DB_URL"] = db_url
         init_db()
@@ -136,9 +138,9 @@ async def _startup() -> None:
         print(f"[SamOS] MemoryAgent init error: {e}")
 
 
-# ----------------------------------------------------------------------------- 
-# Helpers 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
 
 DEFAULT_MODE = os.getenv("SAM_MODE_DEFAULT", "work")
 
@@ -198,9 +200,9 @@ def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
     return datetime.fromisoformat(dt.rstrip("Z"))
 
 
-# ----------------------------------------------------------------------------- 
-# Health & metrics 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
+# Health & metrics
+# -----------------------------------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -278,9 +280,9 @@ async def metrics_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# ----------------------------------------------------------------------------- 
-# Events 
-# ----------------------------------------------------------------------------- 
+# -----------------------------------------------------------------------------
+# Events
+# -----------------------------------------------------------------------------
 
 @app.get("/events")
 def list_events(
@@ -315,77 +317,5 @@ def list_events(
             }
             for r in rows
         ]
-    finally:
-        db.close()
-
-
-@app.get("/events/export")
-def export_events(
-    session_id: Optional[str] = Query(None),
-    kind: Optional[str] = Query(None),
-    since: Optional[str] = Query(None),
-    until: Optional[str] = Query(None),
-    limit: int = Query(1000, gt=1, le=2000),
-):
-    return list_events(session_id=session_id, kind=kind, since=since, until=until, limit=limit)
-
-
-# ----------------------------------------------------------------------------- 
-# Sessions 
-# ----------------------------------------------------------------------------- 
-
-@app.post("/session/start", response_model=SessionStartResponse)
-def start_session():
-    db = SessionLocal()
-    try:
-        sid = str(uuid4())
-        sess = DBSession(id=sid, mode=DEFAULT_MODE)
-        db.add(sess)
-        db.commit()
-
-        record_event("session.start", "Session created", sid, {"mode": sess.mode})
-        try:
-            if AGENT:
-                AGENT.on_session_start(sid, sess.mode)
-                AGENT.on_event(sid, "session.start", "Session created", {"mode": sess.mode})
-        except Exception:  # noqa: BLE001
-            pass
-
-        return SessionStartResponse(session_id=sid, mode=sess.mode)
-    finally:
-        db.close()
-
-
-@app.get("/session/mode", response_model=ModeGetResponse)
-def get_mode(session_id: str = Query(...)):
-    db = SessionLocal()
-    try:
-        sess = db.query(DBSession).filter(DBSession.id == session_id).first()
-        if not sess:
-            raise HTTPException(status_code=404, detail="Session not found")
-        return ModeGetResponse(session_id=session_id, mode=sess.mode)
-    finally:
-        db.close()
-
-
-@app.post("/session/mode", response_model=ModeGetResponse)
-def set_mode(req: ModeSetRequest):
-    db = SessionLocal()
-    try:
-        sess = db.query(DBSession).filter(DBSession.id == req.session_id).first()
-        if not sess:
-            raise HTTPException(status_code=404, detail="Session not found")
-        sess.mode = req.mode
-        db.add(sess)
-        db.commit()
-
-        record_event("mode.set", "Mode set", req.session_id, {"mode": sess.mode})
-        try:
-            if AGENT:
-                AGENT.on_event(req.session_id, "mode.set", "Mode set", {"mode": sess.mode})
-        except Exception:  # noqa: BLE001
-            pass
-
-        return ModeGetResponse(session_id=req.session_id, mode=sess.mode)
     finally:
         db.close()
