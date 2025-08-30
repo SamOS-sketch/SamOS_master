@@ -3,8 +3,9 @@
 # Load .env files BEFORE reading env vars.
 # 1) Try the CWD (project root)
 # 2) Also force-load the .env that sits next to this file (samos/api/.env)
-from pathlib import Path
+
 import os
+from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
