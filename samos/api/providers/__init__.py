@@ -1,10 +1,19 @@
-# LLMs
-from samos.api.image.comfyui_provider import ComfyUIImages
-from samos.api.image.local_provider import LocalDiffusionImages
+# samos/api/providers/__init__.py
 
-# Images
-from samos.api.image.openai_provider import OpenAIImages
-from samos.api.image.stability_provider import StabilityImages
-from samos.api.image.stub import StubProvider
-from samos.api.llm.claude_llm import ClaudeLLM
-from samos.api.llm.openai_llm import OpenAILLM
+# Image providers
+from .openai_provider import OpenAIImages
+from .stability_provider import StabilityImages
+from .stub import StubProvider
+
+# LLM providers
+from .llm.claude_llm import ClaudeLLM
+from .llm.openai_llm import OpenAILLM
+
+# Make the re-exports explicit so ruff doesn't flag F401
+__all__ = [
+    "OpenAIImages",
+    "StabilityImages",
+    "StubProvider",
+    "ClaudeLLM",
+    "OpenAILLM",
+]
