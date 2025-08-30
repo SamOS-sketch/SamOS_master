@@ -4,9 +4,11 @@
 # 1) Try the CWD (project root)
 # 2) Also force-load the .env that sits next to this file (samos/api/.env)
 from pathlib import Path
+import os
 
 from dotenv import find_dotenv, load_dotenv
 
+# --- Load .env files ---
 # Load from working directory (e.g., C:\...\samos_phase4_scaffold\.env) if present
 load_dotenv(find_dotenv(usecwd=True))
 
@@ -14,8 +16,6 @@ load_dotenv(find_dotenv(usecwd=True))
 api_env = Path(__file__).resolve().parent / ".env"
 if api_env.exists():
     load_dotenv(dotenv_path=api_env, override=True)
-
-import os
 
 # ---- Database ----
 DB_URL = os.getenv("DB_URL", "sqlite:///./samos.db")

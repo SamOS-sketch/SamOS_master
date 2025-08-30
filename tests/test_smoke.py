@@ -1,12 +1,13 @@
 import os
-import importlib
 import sys
+import importlib
 from fastapi.testclient import TestClient
 
+# --- Test Environment Setup ---
 os.environ["SAMOS_PERSONA"] = "demo"
 os.environ.pop("SOULPRINT_PATH", None)
 
-# ensure modules re-read env
+# Ensure modules re-read env
 if "samos.config" in sys.modules:
     importlib.reload(sys.modules["samos.config"])
 if "samos.api.main" in sys.modules:
@@ -15,6 +16,7 @@ if "samos.api.main" in sys.modules:
 from samos.api.main import app  # noqa: E402
 
 client = TestClient(app)
+
 
 def test_health_reports_demo_soulprint():
     r = client.get("/health")
@@ -25,6 +27,7 @@ def test_health_reports_demo_soulprint():
     # Accept either the actual demo file or UNAVAILABLE (when not present in test env)
     assert (sp.endswith("soulprint.demo.yaml")) or (sp.upper() == "UNAVAILABLE")
     assert isinstance(data.get("provider"), str)
+
 
 def test_session_and_image_happy_path():
     r = client.post("/session/start")
