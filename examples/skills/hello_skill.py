@@ -12,8 +12,7 @@ class HelloSkill:
 
     def run(self, msg: UserMessage, ctx: Context) -> Response:
         ident = ctx.soulprint.identity
-       return (
-    f"Hello back — I'm {ident['name']} "
-    f"and my mission is: {ident['mission']}"
-)
-
+        return (
+            f"Hello back — I'm {ident['name']} "
+            f"and my mission is: {ident['mission']}"
+        )
