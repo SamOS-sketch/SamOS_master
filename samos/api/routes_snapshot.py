@@ -1,10 +1,12 @@
 # samos/api/routes_snapshot.py
 
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session as OrmSession
 
 from samos.api.db import SessionLocal, get_db
@@ -154,11 +156,14 @@ def post_restore(
                 },
             )
 
-        # images
+        # images (wrapped SQL to satisfy line-length rules)
         for i in snap.images:
             db.execute(
-                "INSERT INTO images (id, session_id, prompt, provider, url, reference_used, status, meta_json, created_at) "
-                "VALUES (:id,:sid,:prompt,:provider,:url,:ref,:status,:meta,:ca)",
+                text(
+                    "INSERT INTO images "
+                    "(id, session_id, prompt, provider, url, reference_used, status, meta_json, created_at) "
+                    "VALUES (:id, :sid, :prompt, :provider, :url, :ref, :status, :meta, :ca)"
+                ),
                 {
                     "id": i["id"],
                     "sid": i["session_id"],
@@ -231,8 +236,6 @@ def post_restore(
 
 @router.get("/backups")
 def list_backups():
-    from pathlib import Path
-
     p = Path(SNAPSHOT_DIR)
     files = []
     if p.exists():
