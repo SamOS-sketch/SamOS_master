@@ -1,4 +1,5 @@
 ﻿from typing import Optional, Tuple
+import os
 from .openai_client import OpenAIClient, OpenAIConfig
 
 class LLMService:
@@ -6,18 +7,21 @@ class LLMService:
     Thin provider wrapper. Keeps skills/router API unchanged.
 
     Usage:
-        llm = LLMService(provider="openai")  # or "local"/"echo" for stub
-        text, latency_ms = llm.generate("Hello", system_prompt="You are helpful.")
+        llm = LLMService()                  # defaults to env SAM_PROVIDER or "openai"
+        llm = LLMService(provider="openai") # force OpenAI
+        llm = LLMService(provider="local")  # stub/echo mode
     """
 
-    def __init__(self, provider: str = "openai"):
-        self.provider = provider
-        if provider == "openai":
+    def __init__(self, provider: Optional[str] = None):
+        # Default priority: explicit arg > env > "openai"
+        self.provider = provider or os.getenv("SAM_PROVIDER", "openai")
+
+        if self.provider == "openai":
             self.client = OpenAIClient(OpenAIConfig())
-        elif provider in ("local", "echo"):
+        elif self.provider in ("local", "echo"):
             self.client = None
         else:
-            raise ValueError(f"Unknown provider: {provider}")
+            raise ValueError(f"Unknown provider: {self.provider}")
 
     def generate(
         self,
