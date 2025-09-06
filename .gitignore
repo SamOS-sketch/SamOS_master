@@ -26,3 +26,44 @@ samos/sdk/js/package-lock.json
 Thumbs.db
 .vscode/
 .env
+# --- SamOS Phase A1 ---
+# Secrets & env
+.env
+.env.*
+*.env
+
+# Local databases & state
+*.db
+db.sqlite*
+/data/
+/state/
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+
+# Node & coverage
+samos/sdk/js/node_modules/
+coverage.xml
+.coverage*
+htmlcov/
+
+# Caches & junk
+__pycache__/
+*.py[cod]
+*.log
+.cache/
+.tmp/
+tmp/
+
+# Outputs & generated
+snapshots/
+samos/api/generated/
+images/
+outputs/
+logs/
+
+# IDE
+.vscode/
+.idea/
