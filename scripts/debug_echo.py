@@ -1,26 +1,30 @@
-from samos.skills.echo import EchoSkill
-from samos.core.soulprint import Soulprint
-from samos.skills.base import UserMessage, Context
+name: CI
 
-def dump(label, s: str):
-    print(f"\n--- {label} ---")
-    print("repr:", repr(s))
-    print("codes:", [ord(c) for c in s])
+on:
+  push:
+    branches: ["**"]
+  pull_request:
 
-# ---- Router test reproduction (X | t | s: Hello) ----
-sp_x = Soulprint({"identity": {"name": "X", "tone": "t"}})
-ctx_x = Context(soulprint=sp_x)
-out_x = EchoSkill().run(UserMessage(text="Hello"), ctx_x).text
-dump("router_out", out_x)
-print("contains 'Hello'?:", "Hello" in out_x)
-print("contains 'X | t'?:", "X | t" in out_x)
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
 
-# ---- Echo test reproduction (Sam  , warm: ping) ----
-sp_sam = Soulprint({"identity": {"name": "Sam", "tone": "warm"}})
-ctx_sam = Context(soulprint=sp_sam)
-out_sam = EchoSkill().run(UserMessage(text="ping"), ctx_sam).text
-dump("echo_out", out_sam)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
-expected = "Sam  , warm: ping"  # what the test asserts
-dump("echo_expected", expected)
-print("equal?:", out_sam == expected)
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest
+
+      - name: Run tests
+        run: pytest -q
