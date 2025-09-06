@@ -26,6 +26,14 @@ class OpenAIConfig:
     def chat_url(self) -> str:
         return f"{self.base}/chat/completions"
 
+    @property
+    def project_id(self) -> Optional[str]:
+        # Project-scoped keys look like sk-proj-xxxxx...
+        if self.api_key.startswith("sk-proj-"):
+            # Extract project id if provided separately in env
+            return os.getenv("OPENAI_PROJECT_ID")
+        return None
+
 
 class OpenAIClient:
     """Minimal OpenAI chat client with safe timeouts and retries."""
@@ -37,6 +45,11 @@ class OpenAIClient:
             "Authorization": f"Bearer {self.cfg.api_key}",
             "Content-Type": "application/json",
         }
+        # If project-scoped, add header
+        if self.cfg.api_key.startswith("sk-proj-"):
+            project = self.cfg.project_id
+            if project:
+                self._headers["OpenAI-Project"] = project
 
     def _should_retry(self, status: Optional[int]) -> bool:
         if status is None:
