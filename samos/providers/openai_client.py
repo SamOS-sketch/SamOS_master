@@ -19,24 +19,21 @@ class OpenAIConfig:
         self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
         self.log_latency = os.getenv("LOG_PROVIDER_LATENCY", "false").lower() == "true"
 
+        # Project + Org (needed for sk-proj keys in many orgs)
+        self.project_id = os.getenv("OPENAI_PROJECT_ID")  # e.g., proj_xxx
+        self.org_id = os.getenv("OPENAI_ORG_ID")          # e.g., org_xxx
+
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY missing")
 
     @property
-    def chat_url(self) -> str:
-        return f"{self.base}/chat/completions"
-
-    @property
-    def project_id(self) -> Optional[str]:
-        # Project-scoped keys look like sk-proj-xxxxx...
-        if self.api_key.startswith("sk-proj-"):
-            # Extract project id if provided separately in env
-            return os.getenv("OPENAI_PROJECT_ID")
-        return None
+    def responses_url(self) -> str:
+        # Newer unified endpoint
+        return f"{self.base}/responses"
 
 
 class OpenAIClient:
-    """Minimal OpenAI chat client with safe timeouts and retries."""
+    """OpenAI Responses client with safe timeouts and retries."""
 
     def __init__(self, cfg: OpenAIConfig):
         self.cfg = cfg
@@ -45,11 +42,10 @@ class OpenAIClient:
             "Authorization": f"Bearer {self.cfg.api_key}",
             "Content-Type": "application/json",
         }
-        # If project-scoped, add header
-        if self.cfg.api_key.startswith("sk-proj-"):
-            project = self.cfg.project_id
-            if project:
-                self._headers["OpenAI-Project"] = project
+        if self.cfg.project_id:
+            self._headers["OpenAI-Project"] = self.cfg.project_id
+        if self.cfg.org_id:
+            self._headers["OpenAI-Organization"] = self.cfg.org_id
 
     def _should_retry(self, status: Optional[int]) -> bool:
         if status is None:
@@ -60,12 +56,58 @@ class OpenAIClient:
             return True
         return False
 
+    def _serialize_messages_to_input(self, messages: List[Dict[str, Any]]) -> str:
+        """Flatten chat-style messages to a single prompt string for /responses."""
+        parts = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if role == "system":
+                parts.append(f"System: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+            else:
+                parts.append(f"User: {content}")
+        return "\n".join(parts).strip()
+
+    def _extract_text(self, data: Dict[str, Any]) -> str:
+        """
+        Try multiple shapes:
+        - data['output_text'] (common)
+        - data['output'][i]['content'][j]['text'] (raw)
+        - fallback to chat-style choices[0].message.content if present
+        """
+        if isinstance(data, dict):
+            ot = data.get("output_text")
+            if isinstance(ot, str) and ot.strip():
+                return ot.strip()
+            output = data.get("output")
+            if isinstance(output, list):
+                segs = []
+                for item in output:
+                    content = item.get("content")
+                    if isinstance(content, list):
+                        for c in content:
+                            t = c.get("text") or c.get("content")
+                            if isinstance(t, str):
+                                segs.append(t)
+                if segs:
+                    return "".join(segs).strip()
+            # legacy chat shape if gateway translated it
+            choices = data.get("choices")
+            if isinstance(choices, list) and choices:
+                msg = choices[0].get("message") or {}
+                txt = msg.get("content")
+                if isinstance(txt, str):
+                    return txt.strip()
+        raise ValueError("no text found in response payload")
+
     def chat(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         body = {
             "model": self.cfg.model,
-            "messages": messages,
+            "input": self._serialize_messages_to_input(messages),
+            "max_output_tokens": self.cfg.max_tokens,  # Responses API name
             "temperature": self.cfg.temperature,
-            "max_tokens": self.cfg.max_tokens,
         }
 
         attempts = 0
@@ -75,7 +117,7 @@ class OpenAIClient:
             attempts += 1
             try:
                 r = self._session.post(
-                    self.cfg.chat_url,
+                    self.cfg.responses_url,
                     headers=self._headers,
                     json=body,
                     timeout=self.cfg.timeout,
@@ -88,7 +130,7 @@ class OpenAIClient:
                     r.raise_for_status()
 
                 data = r.json()
-                text = data["choices"][0]["message"]["content"]
+                text = self._extract_text(data)
                 latency_ms = int((time.time() - start) * 1000)
 
                 if self.cfg.log_latency:

@@ -1,9 +1,22 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 from typing import List, Optional, Dict, Any
 from samos.runtime.models import UserMessage, Response, Context
 from samos.skills.base import Skill
 from samos.memory.store import MemoryStore
 from samos.runtime.memory_agent import MemoryAgent
+
+def _voice_tag(soul: Any) -> str:
+    vt = getattr(soul, "voice_tag", None)
+    if callable(vt):
+        try:
+            return vt() or "Sam"
+        except Exception:
+            pass
+    if isinstance(soul, dict):
+        v = soul.get("voice_tag") or soul.get("name")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return "Sam"
 
 class Router:
     def __init__(self, skills: List[Skill], memory_store: Optional[MemoryStore] = None):
@@ -17,7 +30,7 @@ class Router:
         # 1) Pre-hook: user-initiated notes ("Remember:" / "Note:")
         saved = self._maybe_store_user_note(msg, ctx)
         if saved:
-            return Response(text=f"{ctx.soulprint.voice_tag()}: Saved that to memory.")
+            return Response(text=f"{_voice_tag(ctx.soulprint)}: Saved that to memory.")
 
         # 2) Route to first supporting skill
         for skill in self.skills:
@@ -30,9 +43,9 @@ class Router:
                     self.agent.process(msg, resp, ctx)
                     return resp
             except Exception as e:
-                return Response(text=f"{ctx.soulprint.voice_tag()}: error in {skill.name} - {e}")
+                return Response(text=f"{_voice_tag(ctx.soulprint)}: error in {skill.name} - {e}")
 
-        return Response(text=f"{ctx.soulprint.voice_tag()}: no skill could handle the request.")
+        return Response(text=f"{_voice_tag(ctx.soulprint)}: no skill could handle the request.")
 
     # ---------- hooks ----------
     def _maybe_store_user_note(self, msg: UserMessage, ctx: Context) -> bool:
