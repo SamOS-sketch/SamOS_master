@@ -1,29 +1,55 @@
-import base64, os, uuid, pathlib, datetime
-from typing import Tuple
+# samos/api/image/utils.py
+from __future__ import annotations
 
-_GEN_DIR = pathlib.Path(__file__).resolve().parent.parent / "generated"
-_GEN_DIR.mkdir(exist_ok=True)
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, Union
+
+# SSD-aware base path
+from samos.core.config import STORAGE_DIR
+from samos.runtime.event_logger import log_event
+
+# Where all image files must go
+OUTPUTS_PATH: Path = STORAGE_DIR / "outputs"
+OUTPUTS_PATH.mkdir(parents=True, exist_ok=True)
 
 
-def _new_filename(ext: str = "png") -> pathlib.Path:
-    stamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    return _GEN_DIR / f"{stamp}-{uuid.uuid4().hex}.{ext.lstrip('.')}"
+def _timestamp() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
-def save_image_bytes(data: bytes, ext: str = "png") -> Tuple[str, str]:
+def _new_filename(ext: str = ".png") -> Path:
+    if not ext.startswith("."):
+        ext = "." + ext
+    return OUTPUTS_PATH / f"img_{_timestamp()}{ext}"
+
+
+def save_bytes(data: bytes, ext: str = ".png") -> Path:
     """
-    Save raw image bytes to disk and return (absolute_path, file_url).
+    New canonical saver: writes bytes to SSD outputs and returns the Path.
     """
-    path = _new_filename(ext)
-    with open(path, "wb") as f:
-        f.write(data)
-    file_url = path.resolve().as_uri()  # file:///...
-    return str(path.resolve()), file_url
+    out_path = _new_filename(ext)
+    out_path.write_bytes(data)
+    log_event(
+        "image_saved",
+        {"path": str(out_path), "storage.path": str(OUTPUTS_PATH), "source": "api.utils"},
+    )
+    return out_path
 
 
-def save_base64_image(b64_str: str, ext: str = "png") -> Tuple[str, str]:
-    """
-    Save a base64-encoded image (no data URL prefix) to disk and return (absolute_path, file_url).
-    """
-    raw = base64.b64decode(b64_str)
-    return save_image_bytes(raw, ext)
+# Back-compat helper:
+# If older code tries to call save(path, data) or save_image_bytes(path, data),
+# we ignore the provided 'path' and still write to the SSD outputs dir.
+PathLike = Union[str, Path]
+
+
+def save(path: PathLike, data: bytes, ext: Optional[str] = None) -> Path:
+    suffix = ext or (Path(path).suffix if isinstance(path, (Path, str)) else ".png") or ".png"
+    return save_bytes(data, suffix)
+
+
+def save_image_bytes(path: PathLike, data: bytes, ext: Optional[str] = None) -> Path:
+    return save(path, data, ext)
+
+
+__all__ = ["OUTPUTS_PATH", "save_bytes", "save", "save_image_bytes"]

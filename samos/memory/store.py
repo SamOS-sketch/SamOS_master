@@ -1,11 +1,16 @@
+
 from __future__ import annotations
 import sqlite3
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any, Iterable, Optional
+from typing import List, Optional
 
-DEFAULT_DB = "samos.db"
+# SSD-aware storage root
+from samos.core.config import STORAGE_DIR
+
+# DB will live at: <SAM_STORAGE_DIR>/memory/samos.db
+DB_PATH: Path = STORAGE_DIR / "memory" / "samos.db"
 
 SchemaSQL = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -28,20 +33,27 @@ class MemoryItem:
     created_at: str
 
 class MemoryStore:
-    def __init__(self, path: str = DEFAULT_DB):
-        self.path = path
+    """Simple SQLite-backed memory store (SSD-aware)."""
+    def __init__(self, path: Optional[str | Path] = None):
+        self.path: Path = Path(path) if path else DB_PATH
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
     def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
+        conn = sqlite3.connect(str(self.path))
         conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+        except Exception:
+            pass
         return conn
 
     def _init(self) -> None:
         with self._conn() as c:
             c.executescript(SchemaSQL)
 
-    def add_memory(self, text: str, tags: List[str] | None = None, importance: int = 3) -> int:
+    def add_memory(self, text: str, tags: Optional[List[str]] = None, importance: int = 3) -> int:
         if not text or not text.strip():
             raise ValueError("memory text is required")
         if importance < 1 or importance > 5:
@@ -66,7 +78,6 @@ class MemoryStore:
         q = f"%{query.strip()}%"
         sql = """
         SELECT id, text, tags, importance, created_at,
-               -- crude 'score': shorter replace -> more matches
                (LENGTH(text) - LENGTH(REPLACE(LOWER(text), LOWER(?), ''))) AS hits
         FROM memories
         WHERE text LIKE ?

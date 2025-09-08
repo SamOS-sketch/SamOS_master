@@ -67,3 +67,16 @@ logs/
 # IDE
 .vscode/
 .idea/
+
+# SamOS runtime
+.samos/
+**/memory/
+**/events/
+**/outputs/
+**/cache/
+# SamOS runtime
+.samos/
+**/memory/
+**/events/
+**/outputs/
+**/cache/
