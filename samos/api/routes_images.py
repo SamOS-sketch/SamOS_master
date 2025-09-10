@@ -2,9 +2,7 @@
 """
 Image routes (Phase A7 – identity lock + drift metrics)
 
-This module defines the /image/generate endpoint.
-It wires ImageSkill into FastAPI, logs events, and bumps metrics
-without creating circular imports.
+Defines POST /image/generate. Uses ImageSkill and updates metrics.
 """
 
 from __future__ import annotations
@@ -17,7 +15,6 @@ from samos.config import settings
 
 router = APIRouter()
 
-# single shared skill instance
 _skill = ImageSkill(event_logger=None)
 
 
@@ -27,21 +24,21 @@ def generate_image(req: ImageGenerateRequest):
     Generate an image with identity lock + drift detection (Phase A7).
     """
     try:
+        # model has only prompt + session_id; use sane defaults for others
         result = _skill.run(
             prompt=req.prompt,
-            size=req.size or "1024x1024",
-            provider_name=req.provider,
+            size="1024x1024",
+            provider_name=settings.IMAGE_PROVIDER,
             session_id=req.session_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
 
-    # Build event payload for observability
     event = {
         "type": f"image.generate.{result.get('status', 'fail')}",
         "session_id": req.session_id,
         "prompt": req.prompt,
-        "size": req.size,
+        "size": "1024x1024",
         "url": result.get("url"),
         "image_id": result.get("image_id"),
         "meta": result.get("meta", {}),
@@ -55,16 +52,16 @@ def generate_image(req: ImageGenerateRequest):
     except Exception:
         pass
 
-    # ---- A7 metrics bump (lazy import to avoid circular dependency) ----
+    # A7 metrics bump (lazy import to avoid circular dependency)
     try:
-        from samos.api import main as app_main  # main is already loaded by now
+        from samos.api import main as app_main
         if event.get("ref_used"):
             app_main._METRICS["image_ref_used_count"] += 1
         drift = event.get("drift_score")
         if isinstance(drift, (int, float)) and drift > settings.DRIFT_THRESHOLD:
             app_main._METRICS["image_drift_detected_count"] += 1
     except Exception:
-        # keep metrics non-fatal
         pass
 
     return result
+
