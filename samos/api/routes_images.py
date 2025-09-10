@@ -3,7 +3,8 @@
 Image routes (Phase A7 – identity lock + drift metrics)
 
 This module defines the /image/generate endpoint.
-It wires ImageSkill into FastAPI and updates metrics/events.
+It wires ImageSkill into FastAPI, logs events, and bumps metrics
+without creating circular imports.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from samos.skills.image import ImageSkill
 from samos.api.models import ImageGenerateRequest
 from samos.api.obs.events import record_event
-from samos.api.main import bump_image_metrics_from_event
+from samos.config import settings
 
 router = APIRouter()
 
@@ -48,13 +49,22 @@ def generate_image(req: ImageGenerateRequest):
         "drift_score": result.get("drift_score"),
     }
 
-    # Record event
+    # Record event (best-effort)
     try:
         record_event(event["type"], "image generate request", req.session_id, event)
     except Exception:
         pass
 
-    # Bump A7 metrics
-    bump_image_metrics_from_event(event)
+    # ---- A7 metrics bump (lazy import to avoid circular dependency) ----
+    try:
+        from samos.api import main as app_main  # main is already loaded by now
+        if event.get("ref_used"):
+            app_main._METRICS["image_ref_used_count"] += 1
+        drift = event.get("drift_score")
+        if isinstance(drift, (int, float)) and drift > settings.DRIFT_THRESHOLD:
+            app_main._METRICS["image_drift_detected_count"] += 1
+    except Exception:
+        # keep metrics non-fatal
+        pass
 
     return result
