@@ -122,6 +122,12 @@ class Image(Base):
     id = Column(String, primary_key=True, index=True)
     session_id = Column(String, ForeignKey("sessions.id"))
     prompt = Column(Text)
+    from sqlalchemy import Column, Boolean, Float, String, Integer
+    ref_used = Column(Boolean, nullable=False, default=False)
+    drift_score = Column(Float, nullable=True)
+    provider = Column(String(64), nullable=True)
+    tier = Column(String(32), nullable=True)
+    latency_ms = Column(Integer, nullable=True)
 
     # Phase 8 provenance fields
     provider = Column(
