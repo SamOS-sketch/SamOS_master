@@ -1,4 +1,16 @@
+from __future__ import annotations
+
+# stdlib
+import os
+import json
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, Callable
+from uuid import uuid4
+
 # --- Ensure image providers self-register on app startup (optional imports) ---
+# These imports only register providers with the registry if the modules exist.
 try:
     import samos.providers.openai_images  # noqa: F401
 except Exception:
@@ -9,17 +21,19 @@ try:
 except Exception:
     print("[SamOS] provider 'comfyui_images' not available; skipping")
 
-# Stub provider should exist locally (we added it in A8a)
+# Stub provider should exist locally (added in A8a)
 try:
     import samos.providers.stub  # noqa: F401
 except Exception as e:
     print("[SamOS] ERROR: stub provider missing.", e)
 # ----------------------------------------------------------------------------- 
 
+# third-party
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+# local
 from samos.api.db import (
     EMM as DBEMM,
     Event as DBEvent,
@@ -29,15 +43,15 @@ from samos.api.db import (
     SessionLocal,
     init_db,
 )
-from samos.api.image.stub import StubProvider
+from samos.providers.stub import StubProvider  # use providers.stub (A8a)
 from samos.api.models import (
     EMMCreateRequest,
     EMMItem,
     EMMListResponse,
     ImageGenerateRequest,
     SessionStartResponse,
-    ModeSetRequest,   # Added import for ModeSetRequest
-    ModeGetResponse,  # Added import for ModeGetResponse
+    ModeSetRequest,
+    ModeGetResponse,
 )
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
@@ -69,12 +83,14 @@ app.include_router(image_router)
 # In-memory counters (Counter defaults missing keys to 0)
 _METRICS: Counter[str] = Counter()
 # Explicit keys so /metrics schema stays stable and matches skill increments
-_METRICS.update({
-    "images_generated": 0,
-    "images_failed": 0,
-    "image_ref_used_count": 0,        # Phase A7
-    "image_drift_detected_count": 0,  # Phase A7/A8
-})
+_METRICS.update(
+    {
+        "images_generated": 0,
+        "images_failed": 0,
+        "image_ref_used_count": 0,        # Phase A7
+        "image_drift_detected_count": 0,  # Phase A7/A8
+    }
+)
 
 # Globals filled during startup
 SOULPRINT: dict | object = {}
@@ -82,7 +98,7 @@ SOULPRINT_PATH: str = "UNAVAILABLE"
 AGENT = None  # MemoryAgent
 
 # -----------------------------------------------------------------------------
-# Providers (feature-flagged; lazy import to avoid optional deps at import time)
+# Providers (feature-flagged; lazy instantiation)
 # -----------------------------------------------------------------------------
 
 class _ComfyUIStub(StubProvider):
@@ -91,6 +107,7 @@ class _ComfyUIStub(StubProvider):
 
 
 def _make_openai_provider():
+    # Lazy import so openai deps are optional until selected
     from samos.api.image.openai_provider import OpenAIProvider
     return OpenAIProvider()
 
@@ -214,6 +231,7 @@ def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
         return None
     return datetime.fromisoformat(dt.rstrip("Z"))
 
+
 # -------------------------------------------------------------------------
 # Phase A8a: unified image metrics bump (same-process as /metrics endpoint)
 # -------------------------------------------------------------------------
@@ -278,12 +296,14 @@ def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
     before = dict(_METRICS)
     _METRICS.clear()
     # Preserve explicit keys so /metrics schema remains stable
-    _METRICS.update({
-        "images_generated": 0,
-        "images_failed": 0,
-        "image_ref_used_count": 0,
-        "image_drift_detected_count": 0,
-    })
+    _METRICS.update(
+        {
+            "images_generated": 0,
+            "images_failed": 0,
+            "image_ref_used_count": 0,
+            "image_drift_detected_count": 0,
+        }
+    )
     deleted_buckets = 0
     deleted_counters = 0
     if also_buckets or also_counters_table:
@@ -340,12 +360,12 @@ async def metrics_middleware(request: Request, call_next):
 
 
 # -----------------------------------------------------------------------------
-# Phase A7: metrics helper (to be called from routes_images after generation)
+# Phase A7 back-compat shim for metrics (used by routes_images)
 # -----------------------------------------------------------------------------
 
 def bump_image_metrics_from_event(event: dict) -> None:
     """
-    Back-compat shim kept for routes_images. Delegates to bump_image_counters().
+    Delegates to bump_image_counters().
     Expected event keys: ok (bool), ref_used (bool), drift_score (float|None), ts (ISO str|None)
     """
     try:
