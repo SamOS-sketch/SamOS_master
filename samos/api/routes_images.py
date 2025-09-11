@@ -1,11 +1,12 @@
 # samos/api/routes_images.py
 """
-Image routes (Phase A7 – identity lock + drift metrics)
+Image routes (Phase A8a – identity lock + drift metrics + event consistency)
 
-Defines POST /image/generate. Uses ImageSkill and updates metrics.
+Defines POST /image/generate. Uses ImageSkill and updates metrics + events in a single place.
 """
-
 from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from samos.skills.image import ImageSkill
@@ -13,18 +14,27 @@ from samos.api.models import ImageGenerateRequest
 from samos.api.obs.events import record_event
 from samos.config import settings
 
-router = APIRouter()
+# Access unified image metrics helper in the same process as /metrics
+from samos.api import main as app_main
 
+router = APIRouter()
 _skill = ImageSkill(event_logger=None)
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @router.post("/image/generate")
 def generate_image(req: ImageGenerateRequest):
     """
-    Generate an image with identity lock + drift detection (Phase A7).
+    Generate an image with identity lock + drift detection (Phase A8a).
+    Ensures:
+      - one canonical metrics bump
+      - consistent event emission (ok/fail + drift + onebounce)
     """
     try:
-        # model has only prompt + session_id; use sane defaults for others
+        # Model has only prompt + session_id; use sane defaults for others
         result = _skill.run(
             prompt=req.prompt,
             size="1024x1024",
@@ -32,34 +42,76 @@ def generate_image(req: ImageGenerateRequest):
             session_id=req.session_id,
         )
     except Exception as e:
+        # Count a failed attempt & emit a fail event
+        try:
+            app_main.bump_image_counters(ok=False)
+            record_event(
+                "image.generate.fail",
+                "image generation error",
+                req.session_id,
+                {"error": str(e), "ts": _utc_iso()},
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
 
-    event = {
-        "type": f"image.generate.{result.get('status', 'fail')}",
-        "session_id": req.session_id,
-        "prompt": req.prompt,
-        "size": "1024x1024",
-        "url": result.get("url"),
-        "image_id": result.get("image_id"),
-        "meta": result.get("meta", {}),
-        "ref_used": result.get("ref_used"),
-        "drift_score": result.get("drift_score"),
-    }
+    status = str(result.get("status", "fail")).lower()
+    ok = status == "ok"
 
-    # Record event (best-effort)
+    # Normalize back-compat flags
+    ref_used = bool(
+        result.get("ref_used")
+        if "ref_used" in result
+        else result.get("reference_used", False)
+    )
+    drift_score = result.get("drift_score")
+    provider = result.get("provider")
+    meta = dict(result.get("meta") or {})
+    meta.setdefault("ts", _utc_iso())
+    if provider and "provider" not in meta:
+        meta["provider"] = provider
+
+    # --- Event: image.generate.ok/fail ---
     try:
-        record_event(event["type"], "image generate request", req.session_id, event)
+        record_event(
+            f"image.generate.{status}",
+            "image generate request",
+            req.session_id,
+            {
+                "session_id": req.session_id,
+                "prompt": req.prompt,
+                "size": "1024x1024",
+                "url": result.get("url"),
+                "image_id": result.get("image_id"),
+                "ref_used": ref_used,
+                "drift_score": drift_score,
+                "meta": meta,
+            },
+        )
     except Exception:
         pass
 
-    # A7 metrics bump (lazy import to avoid circular dependency)
+    # --- Metrics: single, unified bump in the API process ---
     try:
-        from samos.api import main as app_main
-        if event.get("ref_used"):
-            app_main._METRICS["image_ref_used_count"] += 1
-        drift = event.get("drift_score")
-        if isinstance(drift, (int, float)) and drift > settings.DRIFT_THRESHOLD:
-            app_main._METRICS["image_drift_detected_count"] += 1
+        app_main.bump_image_counters(
+            ok=ok, ref_used=ref_used, drift_score=drift_score
+        )
+    except Exception:
+        pass
+
+    # --- Event: drift breach → emit once (image.drift.detected + emm.onebounce) ---
+    try:
+        if isinstance(drift_score, (int, float)) and drift_score > settings.DRIFT_THRESHOLD:
+            payload = {
+                "session_id": req.session_id,
+                "image_id": result.get("image_id"),
+                "url": result.get("url"),
+                "drift_score": drift_score,
+                "threshold": settings.DRIFT_THRESHOLD,
+                "meta": meta,
+            }
+            record_event("image.drift.detected", "drift threshold breached", req.session_id, payload)
+            record_event("emm.onebounce", "identity drift breach recorded", req.session_id, payload)
     except Exception:
         pass
 
