@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Float,
     create_engine,
     text,
 )
@@ -42,6 +43,7 @@ DB_URL = _resolve_db_url()
 
 
 # ---------- SQLAlchemy base / engine / session ----------
+
 Base = declarative_base()
 
 # sqlite needs check_same_thread=False and benefits from a longer timeout
@@ -118,35 +120,53 @@ class Memory(Base):
 
 
 class Image(Base):
+    """
+    SamOS Image record (Phase A8a aligned)
+    Canonical fields:
+      - url (string)
+      - prompt (text)
+      - ref_used (bool)
+      - drift_score (float)
+      - provider (string)
+      - tier (string)
+      - latency_ms (int)
+      - provenance (json-as-text; optional)
+      - status (string; ok|failed)
+      - meta_json (json-as-text; optional)
+    """
+
     __tablename__ = "images"
+
     id = Column(String, primary_key=True, index=True)
     session_id = Column(String, ForeignKey("sessions.id"))
+
+    # Core request/response fields
+    url = Column(Text)                      # file:// or http(s)://
     prompt = Column(Text)
-    from sqlalchemy import Column, Boolean, Float, String, Integer
     ref_used = Column(Boolean, nullable=False, default=False)
     drift_score = Column(Float, nullable=True)
-    provider = Column(String(64), nullable=True)
-    tier = Column(String(32), nullable=True)
-    latency_ms = Column(Integer, nullable=True)
 
-    # Phase 8 provenance fields
-    provider = Column(
-        String, nullable=True
-    )  # e.g. openai | stability_api | comfyui | stub
-    tier = Column(String, nullable=True)  # primary | recovery | fallback
-    latency_ms = Column(
-        Integer, nullable=True
-    )  # measured latency for the successful attempt
-    reference_used = Column(Boolean, default=False)  # whether reference image was used
-    provenance = Column(Text, nullable=True)  # JSON-as-text for SQLite (extra details)
+    # Provider provenance
+    provider = Column(String(64), nullable=True)   # e.g. openai | comfyui | stub
+    tier = Column(String(32), nullable=True)       # e.g. primary | recovery | fallback
+    latency_ms = Column(Integer, nullable=True)    # measured latency for successful attempt
+    provenance = Column(Text, nullable=True)       # JSON-as-text for extra details
 
-    # Existing fields
-    url = Column(Text)
-    status = Column(String, default="ok")  # ok | failed
+    # Status + metadata
+    status = Column(String, default="ok")          # ok | failed
     meta_json = Column(Text, default="{}")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("Session", back_populates="images")
+
+    # ---- Backward-compat accessors (avoid breaking older code that used `reference_used`) ----
+    @property
+    def reference_used(self) -> bool:
+        return bool(self.ref_used)
+
+    @reference_used.setter
+    def reference_used(self, val: bool):
+        self.ref_used = bool(val)
 
 
 class EMM(Base):
@@ -199,7 +219,6 @@ class MetricsBucket(Base):
 
 
 # ---------- init ----------
-
 
 def init_db():
     """Create all tables if they don't exist, and harden SQLite settings."""
