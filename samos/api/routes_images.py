@@ -58,18 +58,26 @@ def generate_image(req: ImageGenerateRequest):
     status = str(result.get("status", "fail")).lower()
     ok = status == "ok"
 
-    # Normalize back-compat flags
+    # Extract meta first (some providers stash flags inside meta)
+    meta = dict(result.get("meta") or {})
+    meta.setdefault("ts", _utc_iso())
+    provider = result.get("provider")
+    if provider and "provider" not in meta:
+        meta["provider"] = provider
+
+    # Normalize back-compat flags:
+    # prefer top-level ref_used/reference_used, else fall back to meta.reference_used/meta.ref_used
     ref_used = bool(
         result.get("ref_used")
         if "ref_used" in result
-        else result.get("reference_used", False)
+        else result.get(
+            "reference_used",
+            meta.get("reference_used", meta.get("ref_used", False)),
+        )
     )
+
+    # Drift score (may be None)
     drift_score = result.get("drift_score")
-    provider = result.get("provider")
-    meta = dict(result.get("meta") or {})
-    meta.setdefault("ts", _utc_iso())
-    if provider and "provider" not in meta:
-        meta["provider"] = provider
 
     # --- Event: image.generate.ok/fail ---
     try:
@@ -116,4 +124,3 @@ def generate_image(req: ImageGenerateRequest):
         pass
 
     return result
-
