@@ -210,6 +210,43 @@ def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
         return None
     return datetime.fromisoformat(dt.rstrip("Z"))
 
+# -------------------------------------------------------------------------
+# Phase A8a: unified image metrics bump (same-process as /metrics endpoint)
+# -------------------------------------------------------------------------
+def bump_image_counters(
+    ok: bool,
+    ref_used: bool | None = None,
+    drift_score: float | None = None,
+    *,
+    ts: datetime | None = None,
+) -> None:
+    """
+    Unified counter bump so /metrics reflects image generation in this process.
+    - ok=True  -> images_generated++
+    - ok=False -> images_failed++
+    - ref_used -> image_ref_used_count++
+    - drift_score>threshold -> image_drift_detected_count++
+
+    Also writes DB buckets for "image.ok"/"image.fail" (hour/day).
+    """
+    try:
+        _ts = ts or _utc_now()
+        if ok:
+            _METRICS["images_generated"] += 1
+            _bump_buckets("image.ok", _ts)
+        else:
+            _METRICS["images_failed"] += 1
+            _bump_buckets("image.fail", _ts)
+
+        if ref_used:
+            _METRICS["image_ref_used_count"] += 1
+
+        if isinstance(drift_score, (int, float)) and drift_score > settings.DRIFT_THRESHOLD:
+            _METRICS["image_drift_detected_count"] += 1
+    except Exception:
+        # Metrics must never break the request path
+        pass
+
 
 # -----------------------------------------------------------------------------
 # Health & metrics
@@ -304,17 +341,17 @@ async def metrics_middleware(request: Request, call_next):
 
 def bump_image_metrics_from_event(event: dict) -> None:
     """
-    Increment A7 metrics based on an image.generate.* event payload.
-    Expected fields: ref_used (bool), drift_score (float or None)
+    Back-compat shim kept for routes_images. Delegates to bump_image_counters().
+    Expected event keys: ok (bool), ref_used (bool), drift_score (float|None), ts (ISO str|None)
     """
     try:
-        if event.get("ref_used"):
-            _METRICS["image_ref_used_count"] += 1
+        ok = bool(event.get("ok", True))  # default assume success if not provided
+        ref_used = bool(event.get("ref_used", False))
         drift = event.get("drift_score")
-        if isinstance(drift, (int, float)) and drift > settings.DRIFT_THRESHOLD:
-            _METRICS["image_drift_detected_count"] += 1
+        ts_iso = event.get("ts")
+        ts = _parse_iso(ts_iso) if ts_iso else None
+        bump_image_counters(ok=ok, ref_used=ref_used, drift_score=drift, ts=ts)
     except Exception:
-        # keep metrics path non-fatal
         pass
 
 
