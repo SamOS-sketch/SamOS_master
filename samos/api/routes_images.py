@@ -70,12 +70,12 @@ def generate_image(req: ImageGenerateRequest):
       - one canonical metrics bump
       - consistent event emission (ok/fail + drift + onebounce)
     """
-    # --- Dev-only test hook: force a runtime failure to exercise fail path ---
-    # Send prompt="__FAIL__" to validate images_failed + image.generate.fail.
-    if req.prompt == "__FAIL__":
-        raise RuntimeError("forced failure for test")
-
     try:
+        # --- Dev-only test hook: force a runtime failure to exercise fail path ---
+        # Send prompt="__FAIL__" to validate images_failed + image.generate.fail.
+        if req.prompt == "__FAIL__":
+            raise RuntimeError("forced failure for test")
+
         # Model has only prompt + session_id; use sane defaults for others
         result = _skill.run(
             prompt=req.prompt,
@@ -120,7 +120,6 @@ def generate_image(req: ImageGenerateRequest):
             meta.get("reference_used", meta.get("ref_used", False)),
         )
     )
-    # Ensure it's mirrored into meta for downstream consumers
     meta.setdefault("reference_used", ref_used)
 
     # Drift score (may be None)
@@ -173,3 +172,4 @@ def generate_image(req: ImageGenerateRequest):
         result = dict(result)
         result["url"] = url_norm
     return result
+
