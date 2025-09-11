@@ -72,9 +72,7 @@ def generate_image(req: ImageGenerateRequest):
     """
     try:
         # --- Dev-only test hook: force a runtime failure to exercise fail path ---
-        # Send prompt="__FAIL__" to validate images_failed + image.generate.fail.
-        if req.prompt == "__FAIL__":
-            raise RuntimeError("forced failure for test")
+     
 
         # Model has only prompt + session_id; use sane defaults for others
         result = _skill.run(
