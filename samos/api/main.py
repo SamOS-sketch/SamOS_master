@@ -7,6 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Callable
 from uuid import uuid4
+# Ensure image providers are registered at startup
+import samos.providers.openai_images  # noqa: F401
+import samos.providers.comfyui_images  # noqa: F401
+import samos.providers.stub  # noqa: F401
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,12 +62,14 @@ if settings.cors_origins:
 app.include_router(snapshot_router)
 app.include_router(image_router)
 
-# In-memory counters
+# In-memory counters (Counter defaults missing keys to 0)
 _METRICS: Counter[str] = Counter()
-# Phase A7: add identity/ drift counters (explicitly present in /metrics even before first increment)
+# Explicit keys so /metrics schema stays stable and matches skill increments
 _METRICS.update({
-    "image_ref_used_count": 0,
-    "image_drift_detected_count": 0,
+    "images_generated": 0,
+    "images_failed": 0,
+    "image_ref_used_count": 0,        # Phase A7
+    "image_drift_detected_count": 0,  # Phase A7/A8
 })
 
 # Globals filled during startup
@@ -232,6 +238,8 @@ def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
     _METRICS.clear()
     # Preserve explicit keys so /metrics schema remains stable
     _METRICS.update({
+        "images_generated": 0,
+        "images_failed": 0,
         "image_ref_used_count": 0,
         "image_drift_detected_count": 0,
     })
@@ -421,4 +429,3 @@ def set_mode(req: ModeSetRequest):
         return ModeGetResponse(session_id=req.session_id, mode=sess.mode)
     finally:
         db.close()
-
