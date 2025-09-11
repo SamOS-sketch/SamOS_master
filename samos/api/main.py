@@ -1,16 +1,20 @@
-from __future__ import annotations
-import sys
-import os
-import json
-from collections import Counter
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional, Callable
-from uuid import uuid4
-# Ensure image providers are registered at startup
-import samos.providers.openai_images  # noqa: F401
-import samos.providers.comfyui_images  # noqa: F401
-import samos.providers.stub  # noqa: F401
+# --- Ensure image providers self-register on app startup (optional imports) ---
+try:
+    import samos.providers.openai_images  # noqa: F401
+except Exception:
+    print("[SamOS] provider 'openai_images' not available; skipping")
+
+try:
+    import samos.providers.comfyui_images  # noqa: F401
+except Exception:
+    print("[SamOS] provider 'comfyui_images' not available; skipping")
+
+# Stub provider should exist locally (we added it in A8a)
+try:
+    import samos.providers.stub  # noqa: F401
+except Exception as e:
+    print("[SamOS] ERROR: stub provider missing.", e)
+# ----------------------------------------------------------------------------- 
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
