@@ -7,6 +7,7 @@ Defines POST /image/generate. Uses ImageSkill and updates metrics + events in a 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 from samos.skills.image import ImageSkill
@@ -25,6 +26,42 @@ def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_file_url(u: str | None) -> str | None:
+    """
+    Normalize local file URLs, especially on Windows.
+
+    Examples:
+      "file://D:\\path\\img.png"   -> "file:///D:/path/img.png"
+      "file:///C:/path/img.png"    -> unchanged
+      "C:\\path\\img.png"          -> "file:///C:/path/img.png"
+    """
+    if not u:
+        return u
+    s = str(u)
+
+    # If it's already a file URL with forward slashes, keep it
+    if s.startswith("file:///"):
+        return s
+
+    # If it's a 'file://' with backslashes or missing third slash
+    if s.lower().startswith("file://"):
+        # strip "file://" and normalize
+        rest = s[7:].replace("\\", "/")
+        # Ensure we have "file:///" + drive colon case (e.g., D:/...)
+        if len(rest) >= 2 and rest[1] == ":":
+            return f"file:///{rest}"
+        # Otherwise, best effort
+        return f"file:///{rest.lstrip('/')}"
+
+    # If it's a bare Windows path, convert
+    if "\\" in s and ":" in s[:3]:
+        drive_fixed = s.replace("\\", "/")
+        return f"file:///{drive_fixed}"
+
+    # For anything else, leave as-is
+    return s
+
+
 @router.post("/image/generate")
 def generate_image(req: ImageGenerateRequest):
     """
@@ -33,6 +70,11 @@ def generate_image(req: ImageGenerateRequest):
       - one canonical metrics bump
       - consistent event emission (ok/fail + drift + onebounce)
     """
+    # --- Dev-only test hook: force a runtime failure to exercise fail path ---
+    # Send prompt="__FAIL__" to validate images_failed + image.generate.fail.
+    if req.prompt == "__FAIL__":
+        raise RuntimeError("forced failure for test")
+
     try:
         # Model has only prompt + session_id; use sane defaults for others
         result = _skill.run(
@@ -65,6 +107,9 @@ def generate_image(req: ImageGenerateRequest):
     if provider and "provider" not in meta:
         meta["provider"] = provider
 
+    # Normalize URL (especially Windows file paths)
+    url_norm = _normalize_file_url(result.get("url"))
+
     # Normalize back-compat flags:
     # prefer top-level ref_used/reference_used, else fall back to meta.reference_used/meta.ref_used
     ref_used = bool(
@@ -75,6 +120,8 @@ def generate_image(req: ImageGenerateRequest):
             meta.get("reference_used", meta.get("ref_used", False)),
         )
     )
+    # Ensure it's mirrored into meta for downstream consumers
+    meta.setdefault("reference_used", ref_used)
 
     # Drift score (may be None)
     drift_score = result.get("drift_score")
@@ -89,7 +136,7 @@ def generate_image(req: ImageGenerateRequest):
                 "session_id": req.session_id,
                 "prompt": req.prompt,
                 "size": "1024x1024",
-                "url": result.get("url"),
+                "url": url_norm,
                 "image_id": result.get("image_id"),
                 "ref_used": ref_used,
                 "drift_score": drift_score,
@@ -101,9 +148,7 @@ def generate_image(req: ImageGenerateRequest):
 
     # --- Metrics: single, unified bump in the API process ---
     try:
-        app_main.bump_image_counters(
-            ok=ok, ref_used=ref_used, drift_score=drift_score
-        )
+        app_main.bump_image_counters(ok=ok, ref_used=ref_used, drift_score=drift_score)
     except Exception:
         pass
 
@@ -113,7 +158,7 @@ def generate_image(req: ImageGenerateRequest):
             payload = {
                 "session_id": req.session_id,
                 "image_id": result.get("image_id"),
-                "url": result.get("url"),
+                "url": url_norm,
                 "drift_score": drift_score,
                 "threshold": settings.DRIFT_THRESHOLD,
                 "meta": meta,
@@ -123,4 +168,8 @@ def generate_image(req: ImageGenerateRequest):
     except Exception:
         pass
 
+    # Return result with normalized URL for clients
+    if url_norm is not None:
+        result = dict(result)
+        result["url"] = url_norm
     return result
