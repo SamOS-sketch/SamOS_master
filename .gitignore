@@ -35,3 +35,13 @@ Thumbs.db
 
 # Outputs (temporary run files, drift sidecars etc.)
 outputs/
+# SQLite temp journals
+*.db-wal
+*.db-shm
+
+# Backup files
+*.bak
+
+# Logs and probes
+logs/
+*_probe.py
