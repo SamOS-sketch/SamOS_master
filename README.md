@@ -82,3 +82,19 @@ Drift scoring is centralized in `samos/providers/image_base.py`.
 - Every generation persists metadata (incl. `drift_score`) and emits `image.generate.ok` or `image.generate.fail`.
 - File URLs are normalized (e.g., `file:///D:/...`).
 - `meta.reference_used` is always present (true/false).
+## Image providers & routing
+
+SamOS can route across multiple providers with automatic fallback.
+
+- Primary: `IMAGE_PROVIDER`
+- Fallback chain: `IMAGE_PROVIDER_FALLBACK` (colon-separated)
+- Example: `comfyui:openai:stub`
+
+Providers:
+- `comfyui` — local ComfyUI (or stub/live via `COMFYUI_MODE`)
+- `openai` — `gpt-image-1`
+- `stub` — safe default, always returns a tiny PNG
+
+### Environment
+
+
