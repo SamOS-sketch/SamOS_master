@@ -4,47 +4,76 @@ from __future__ import annotations
 import json
 import os
 import time
+import mimetypes
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select, cast, String
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from samos.api.db import SessionLocal, Image as DBImage, Event as DBEvent
 from samos.api.metrics import inc_ok, inc_fail, inc
 from samos.api.paths import resolve_relpath, to_relpath
 
+# Provider registry + drift scoring
 from samos.providers.image_base import drift_score_for, registry  # provider registry
 
 # Ensure providers self-register on import (side effects)
+# (If registry lookups fail for any reason, we also keep direct class fallbacks)
 from samos.providers.comfyui_images import ComfyUIProvider  # noqa: F401
-from samos.providers.openai_images import OpenAIProvider    # noqa: F401
-from samos.providers.stub import StubProvider               # noqa: F401
+from samos.providers.openai_images import OpenAIProvider  # noqa: F401
+from samos.providers.stub import StubProvider  # noqa: F401
 
 router = APIRouter()
 
 
-# -------- helpers --------
+# -------- request/response models (local, to avoid touching global schemas right now) --------
+class ImageGenerateRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    session_id: str = Field(..., description="Required session id")
+    size: Optional[str] = Field(default=None, description="e.g., 1024x1024")
+    reference_url: Optional[str] = Field(default=None)
+    seed: Optional[int] = Field(default=None)
+    provider: Optional[str] = Field(
+        default=None,
+        description="Optional provider override for first hop (e.g., comfyui|openai|stub)",
+    )
 
-def _provider_chain_from_env() -> List[str]:
+
+# -------- helpers --------
+def _provider_chain_from_env(first_override: Optional[str] = None) -> List[str]:
+    """
+    Build the provider chain:
+    - If first_override provided, put it first.
+    - Then IMAGE_PROVIDER, then IMAGE_PROVIDER_FALLBACK split by ':'.
+    - De-dup while preserving order.
+    """
+    pieces: List[str] = []
+    if first_override:
+        pieces.append(first_override)
+
     primary = (os.getenv("IMAGE_PROVIDER") or "stub").strip().lower()
     fb = (os.getenv("IMAGE_PROVIDER_FALLBACK") or "").strip().lower()
-    raw = [p for p in (primary, *fb.split(":")) if p]
+    raw = [*pieces, primary, *([p for p in fb.split(":") if p])]
     seen = set()
     chain: List[str] = []
     for p in raw:
-        if p not in seen:
+        p = (p or "").strip().lower()
+        if p and p not in seen:
             chain.append(p)
             seen.add(p)
     return chain or ["stub"]
 
 
 def _resolve_provider_class(name: str):
+    """Resolve a provider class via the registry with a few defensive fallbacks."""
     n = (name or "").strip().lower()
 
-    # Try several registry styles defensively
+    # Try registry in several shapes
     try:
         if hasattr(registry, "__getitem__"):
             cls = registry[n]  # type: ignore[index]
@@ -53,10 +82,9 @@ def _resolve_provider_class(name: str):
     except Exception:
         pass
     try:
-        if hasattr(registry, "providers"):
-            providers = getattr(registry, "providers")
-            if isinstance(providers, dict) and n in providers:
-                return providers[n]
+        providers = getattr(registry, "providers", None)
+        if isinstance(providers, dict) and n in providers:
+            return providers[n]
     except Exception:
         pass
     try:
@@ -74,6 +102,7 @@ def _resolve_provider_class(name: str):
     except Exception:
         pass
 
+    # Direct class fallbacks (module side effects already registered)
     if n == "comfyui":
         return ComfyUIProvider
     if n == "openai":
@@ -90,14 +119,19 @@ def _instantiate(name: str):
 
 
 def _emit(db: Session, session_id: Optional[str], kind: str, message: str, meta: Dict):
-    evt = DBEvent(
-        session_id=session_id,
-        kind=kind,
-        message=message,
-        meta_json=json.dumps(meta or {}),
-    )
-    db.add(evt)
-    db.commit()
+    """Emit events, but never crash the request if the events table isn't ready yet."""
+    try:
+        evt = DBEvent(
+            session_id=session_id,
+            kind=kind,
+            message=message,
+            meta_json=json.dumps(meta or {}),
+        )
+        db.add(evt)
+        db.commit()
+    except SQLAlchemyError:
+        # Soft-fail: first boot without migrations should not break image generation
+        db.rollback()
 
 
 def _normalize_result_local_path_for_db(result: Dict) -> Optional[str]:
@@ -123,9 +157,7 @@ def _normalize_result_local_path_for_db(result: Dict) -> Optional[str]:
 
 
 def _absolute_path_for_drift(local_path: Optional[str]) -> Optional[str]:
-    """
-    Return an absolute filesystem path for drift calculation.
-    """
+    """Return an absolute filesystem path for drift calculation."""
     if not local_path:
         return None
     p = Path(local_path)
@@ -154,7 +186,9 @@ def _persist_ok(
         url=result.get("url"),
         local_path=local_path_rel_or_abs,
         provider=provider_name,
-        tier=result.get("meta", {}).get("mode") or result.get("meta", {}).get("tier") or None,
+        tier=result.get("meta", {}).get("mode")
+        or result.get("meta", {}).get("tier")
+        or None,
         latency_ms=int(result.get("meta", {}).get("latency_ms") or 0),
         status="ok",
         ref_used=bool(reference_url),
@@ -183,6 +217,7 @@ def _get_image_by_id(db: Session, image_id: str) -> Optional[DBImage]:
     # 2) Try UUID variations
     try:
         import uuid
+
         try:
             obj = db.get(DBImage, uuid.UUID(image_id))
             if obj:
@@ -200,9 +235,10 @@ def _get_image_by_id(db: Session, image_id: str) -> Optional[DBImage]:
 
     # 3) CAST to text
     try:
-        obj = db.execute(
-            select(DBImage).where(cast(DBImage.id, String) == str(image_id))
-        ).scalar_one_or_none()
+        obj = (
+            db.execute(select(DBImage).where(cast(DBImage.id, String) == str(image_id)))
+            .scalar_one_or_none()
+        )
         if obj:
             return obj
     except Exception:
@@ -220,20 +256,18 @@ def _get_image_by_id(db: Session, image_id: str) -> Optional[DBImage]:
 
 
 # -------- endpoints --------
-
 @router.post("/image/generate")
-def image_generate(payload: Dict):
-    prompt = (payload.get("prompt") or "").strip()
-    if not prompt:
-        raise HTTPException(status_code=400, detail="prompt is required")
+def image_generate(payload: ImageGenerateRequest):
+    prompt = payload.prompt.strip()
+    session_id = payload.session_id.strip()
+    size = (payload.size or os.getenv("OPENAI_IMAGE_SIZE") or "1024x1024").strip()
+    reference_url = payload.reference_url
+    seed = payload.seed
+    provider_override = (payload.provider or "").strip().lower() or None
 
-    session_id: Optional[str] = payload.get("session_id")
-    size: str = (payload.get("size") or os.getenv("OPENAI_IMAGE_SIZE") or "1024x1024").strip()
-    reference_url: Optional[str] = payload.get("reference_url")
-    seed = payload.get("seed")
+    chain = _provider_chain_from_env(provider_override)
 
-    chain = _provider_chain_from_env()
-
+    # Emit early routing info; failure here must not crash the request
     with SessionLocal() as db:
         _emit(db, session_id, "image.route.begin", "begin", {"prompt": prompt, "session_id": session_id})
         _emit(db, session_id, "image.route.policy", "policy", {"providers": chain})
@@ -242,7 +276,6 @@ def image_generate(payload: Dict):
 
     for name in chain:
         provider = _instantiate(name)
-
         started = time.perf_counter()
         try:
             result: Dict = provider.generate(
@@ -279,14 +312,20 @@ def image_generate(payload: Dict):
                     reference_url=reference_url,
                     drift=drift,
                 )
-                _emit(db, session_id, "image.generate.ok", "ok", {
-                    "id": db_img.id,
-                    "provider": name,
-                    "latency_ms": result.get("meta", {}).get("latency_ms", tried_ms),
-                    "url": db_img.url,
-                    "local_path": db_img.local_path,
-                    "drift_score": drift,
-                })
+                _emit(
+                    db,
+                    session_id,
+                    "image.generate.ok",
+                    "ok",
+                    {
+                        "id": db_img.id,
+                        "provider": name,
+                        "latency_ms": result.get("meta", {}).get("latency_ms", tried_ms),
+                        "url": db_img.url,
+                        "local_path": db_img.local_path,
+                        "drift_score": drift,
+                    },
+                )
 
                 inc_ok(name)
                 inc("images_generated")
@@ -309,10 +348,13 @@ def image_generate(payload: Dict):
         except Exception as e:
             last_error = str(e)
             with SessionLocal() as db:
-                _emit(db, session_id, "image.generate.fail", "fail", {
-                    "provider": name,
-                    "error": last_error,
-                })
+                _emit(
+                    db,
+                    session_id,
+                    "image.generate.fail",
+                    "fail",
+                    {"provider": name, "error": last_error},
+                )
                 inc_fail(name)
                 inc("images_failed")
 
@@ -344,14 +386,16 @@ def image_file(image_id: str):
                 abs_path = None
 
             if abs_path and abs_path.exists():
-                return FileResponse(str(abs_path), media_type="image/png")
+                guess = mimetypes.guess_type(str(abs_path))[0] or "image/png"
+                return FileResponse(str(abs_path), media_type=guess)
 
         # 2) file:// URL in 'url'
         url = (getattr(img, "url", None) or "").strip()
         if url.startswith("file://"):
             fs_path = os.path.normpath(url.replace("file://", "", 1))
             if os.path.isfile(fs_path):
-                return FileResponse(fs_path, media_type="image/png")
+                guess = mimetypes.guess_type(fs_path)[0] or "image/png"
+                return FileResponse(fs_path, media_type=guess)
 
         # 3) Redirect to remote URL if present
         if url.startswith("http://") or url.startswith("https://"):
@@ -370,12 +414,14 @@ def debug_images_recent(limit: int = 10):
     rows = []
     with SessionLocal() as db:
         for img in db.execute(select(DBImage).limit(limit)).scalars().all():
-            rows.append({
-                "id": img.id,
-                "url": getattr(img, "url", None),
-                "local_path": getattr(img, "local_path", None),
-                "provider": getattr(img, "provider", None),
-            })
+            rows.append(
+                {
+                    "id": img.id,
+                    "url": getattr(img, "url", None),
+                    "local_path": getattr(img, "local_path", None),
+                    "provider": getattr(img, "provider", None),
+                }
+            )
     return {"count": len(rows), "items": rows}
 
 
@@ -392,9 +438,10 @@ def debug_image_file_strict(image_id: str):
 
         # 1) CAST-to-text exact match
         try:
-            img = db.execute(
-                select(DBImage).where(cast(DBImage.id, String) == image_id)
-            ).scalar_one_or_none()
+            img = (
+                db.execute(select(DBImage).where(cast(DBImage.id, String) == image_id))
+                .scalar_one_or_none()
+            )
         except Exception:
             img = None
 
@@ -422,14 +469,16 @@ def debug_image_file_strict(image_id: str):
                 abs_path = None
 
             if abs_path and abs_path.exists():
-                return FileResponse(str(abs_path), media_type="image/png")
+                guess = mimetypes.guess_type(str(abs_path))[0] or "image/png"
+                return FileResponse(str(abs_path), media_type=guess)
 
         # Fallback to file:// URL
         url = (getattr(img, "url", None) or "").strip()
         if url.startswith("file://"):
             fs_path = os.path.normpath(url.replace("file://", "", 1))
             if os.path.isfile(fs_path):
-                return FileResponse(fs_path, media_type="image/png")
+                guess = mimetypes.guess_type(fs_path)[0] or "image/png"
+                return FileResponse(fs_path, media_type=guess)
 
         # HTTP redirect if remote
         if url.startswith("http://") or url.startswith("https://"):
