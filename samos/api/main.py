@@ -1,39 +1,17 @@
-from __future__ import annotations
 
-# stdlib
+from __future__ import annotations
+import sys
 import os
-import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional
 from uuid import uuid4
 
-# --- Ensure image providers self-register on app startup (optional imports) ---
-# These imports only register providers with the registry if the modules exist.
-try:
-    import samos.providers.openai_images  # noqa: F401
-except Exception:
-    print("[SamOS] provider 'openai_images' not available; skipping")
-
-try:
-    import samos.providers.comfyui_images  # noqa: F401
-except Exception:
-    print("[SamOS] provider 'comfyui_images' not available; skipping")
-
-# Stub provider should exist locally (added in A8a)
-try:
-    import samos.providers.stub  # noqa: F401
-except Exception as e:
-    print("[SamOS] ERROR: stub provider missing.", e)
-# ----------------------------------------------------------------------------- 
-
-# third-party
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-# local
 from samos.api.db import (
     EMM as DBEMM,
     Event as DBEvent,
@@ -43,15 +21,15 @@ from samos.api.db import (
     SessionLocal,
     init_db,
 )
-from samos.providers.stub import StubProvider  # use providers.stub (A8a)
+from samos.api.image.stub import StubProvider
 from samos.api.models import (
     EMMCreateRequest,
     EMMItem,
     EMMListResponse,
     ImageGenerateRequest,
     SessionStartResponse,
-    ModeSetRequest,
-    ModeGetResponse,
+    ModeSetRequest,  # Added import for ModeSetRequest
+    ModeGetResponse,  # Added import for ModeGetResponse
 )
 from samos.api.obs.events import record_event
 from samos.api.routes_images import router as image_router
@@ -60,9 +38,9 @@ from samos.config import assert_persona_safety, settings
 from samos.core.memory_agent import get_memory_agent
 from samos.core.soulprint_loader import load_soulprint
 
-# -----------------------------------------------------------------------------
-# App & middleware
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# App & middleware 
+# ----------------------------------------------------------------------------- 
 
 app = FastAPI(title="SamOS API (Phase 11.1)")
 
@@ -80,26 +58,17 @@ if settings.cors_origins:
 app.include_router(snapshot_router)
 app.include_router(image_router)
 
-# In-memory counters (Counter defaults missing keys to 0)
+# In-memory counters
 _METRICS: Counter[str] = Counter()
-# Explicit keys so /metrics schema stays stable and matches skill increments
-_METRICS.update(
-    {
-        "images_generated": 0,
-        "images_failed": 0,
-        "image_ref_used_count": 0,        # Phase A7
-        "image_drift_detected_count": 0,  # Phase A7/A8
-    }
-)
 
 # Globals filled during startup
 SOULPRINT: dict | object = {}
 SOULPRINT_PATH: str = "UNAVAILABLE"
 AGENT = None  # MemoryAgent
 
-# -----------------------------------------------------------------------------
-# Providers (feature-flagged; lazy instantiation)
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# Providers (feature-flagged; lazy import to avoid optional deps at import time) 
+# ----------------------------------------------------------------------------- 
 
 class _ComfyUIStub(StubProvider):
     """Placeholder so IMAGE_PROVIDER=comfyui still works on machines without ComfyUI."""
@@ -107,7 +76,6 @@ class _ComfyUIStub(StubProvider):
 
 
 def _make_openai_provider():
-    # Lazy import so openai deps are optional until selected
     from samos.api.image.openai_provider import OpenAIProvider
     return OpenAIProvider()
 
@@ -135,9 +103,9 @@ def _reference_image(default_fallback: str = "ref_alpha.jpg") -> str:
     return os.getenv("REFERENCE_IMAGE_ALPHA", "") or default_fallback
 
 
-# -----------------------------------------------------------------------------
-# Startup: persona safety → DB init → soulprint → agent
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# Startup: persona safety → DB init → soulprint → agent 
+# ----------------------------------------------------------------------------- 
 
 @app.on_event("startup")
 async def _startup() -> None:
@@ -170,9 +138,9 @@ async def _startup() -> None:
         print(f"[SamOS] MemoryAgent init error: {e}")
 
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# Helpers 
+# ----------------------------------------------------------------------------- 
 
 DEFAULT_MODE = os.getenv("SAM_MODE_DEFAULT", "work")
 
@@ -232,47 +200,9 @@ def _parse_iso(dt: Optional[str]) -> Optional[datetime]:
     return datetime.fromisoformat(dt.rstrip("Z"))
 
 
-# -------------------------------------------------------------------------
-# Phase A8a: unified image metrics bump (same-process as /metrics endpoint)
-# -------------------------------------------------------------------------
-def bump_image_counters(
-    ok: bool,
-    ref_used: bool | None = None,
-    drift_score: float | None = None,
-    *,
-    ts: datetime | None = None,
-) -> None:
-    """
-    Unified counter bump so /metrics reflects image generation in this process.
-    - ok=True  -> images_generated++
-    - ok=False -> images_failed++
-    - ref_used -> image_ref_used_count++
-    - drift_score>threshold -> image_drift_detected_count++
-
-    Also writes DB buckets for "image.ok"/"image.fail" (hour/day).
-    """
-    try:
-        _ts = ts or _utc_now()
-        if ok:
-            _METRICS["images_generated"] += 1
-            _bump_buckets("image.ok", _ts)
-        else:
-            _METRICS["images_failed"] += 1
-            _bump_buckets("image.fail", _ts)
-
-        if ref_used:
-            _METRICS["image_ref_used_count"] += 1
-
-        if isinstance(drift_score, (int, float)) and drift_score > settings.DRIFT_THRESHOLD:
-            _METRICS["image_drift_detected_count"] += 1
-    except Exception:
-        # Metrics must never break the request path
-        pass
-
-
-# -----------------------------------------------------------------------------
-# Health & metrics
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# Health & metrics 
+# ----------------------------------------------------------------------------- 
 
 @app.get("/health")
 def health():
@@ -295,15 +225,6 @@ def metrics():
 def metrics_reset(also_buckets: bool = False, also_counters_table: bool = True):
     before = dict(_METRICS)
     _METRICS.clear()
-    # Preserve explicit keys so /metrics schema remains stable
-    _METRICS.update(
-        {
-            "images_generated": 0,
-            "images_failed": 0,
-            "image_ref_used_count": 0,
-            "image_drift_detected_count": 0,
-        }
-    )
     deleted_buckets = 0
     deleted_counters = 0
     if also_buckets or also_counters_table:
@@ -359,29 +280,9 @@ async def metrics_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# -----------------------------------------------------------------------------
-# Phase A7 back-compat shim for metrics (used by routes_images)
-# -----------------------------------------------------------------------------
-
-def bump_image_metrics_from_event(event: dict) -> None:
-    """
-    Delegates to bump_image_counters().
-    Expected event keys: ok (bool), ref_used (bool), drift_score (float|None), ts (ISO str|None)
-    """
-    try:
-        ok = bool(event.get("ok", True))  # default assume success if not provided
-        ref_used = bool(event.get("ref_used", False))
-        drift = event.get("drift_score")
-        ts_iso = event.get("ts")
-        ts = _parse_iso(ts_iso) if ts_iso else None
-        bump_image_counters(ok=ok, ref_used=ref_used, drift_score=drift, ts=ts)
-    except Exception:
-        pass
-
-
-# -----------------------------------------------------------------------------
-# Events
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# Events 
+# ----------------------------------------------------------------------------- 
 
 @app.get("/events")
 def list_events(
@@ -431,9 +332,9 @@ def export_events(
     return list_events(session_id=session_id, kind=kind, since=since, until=until, limit=limit)
 
 
-# -----------------------------------------------------------------------------
-# Sessions
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
+# Sessions 
+# ----------------------------------------------------------------------------- 
 
 @app.post("/session/start", response_model=SessionStartResponse)
 def start_session():
