@@ -1,100 +1,168 @@
-# SamOS\\nMinimal runtime for Phase 10.
-
-\## Build a Skill in 60 seconds
-
-# SamOS_master
-
-![Build Status](https://img.shields.io/badge/tests-passing-brightgreen)
-![Phase](https://img.shields.io/badge/phase-10%20✔-blue)
-![Version](https://img.shields.io/badge/version-v0.1.0--phase10-orange)
-![License](https://img.shields.io/badge/license-private-lightgrey)
-
----
-
-Minimal runtime for Phase 10.  
-SamOS is evolving through structured development phases, each tagged in GitHub for clarity.  
+SamOS — V1 Release
 
 
 
-Create `my\_skill.py`:
-
-```python
-
-from samos.runtime.models import UserMessage, Response, Context
 
 
 
-class MySkill:
 
-&nbsp; name = "my\_skill"
 
-&nbsp; def supports(self, msg: UserMessage, ctx: Context) -> bool:
+What is SamOS?
 
-&nbsp;   return msg.text.strip().lower().startswith("do:")
+SamOS is a persistent, identity-locked runtime for LLM applications.
+It routes to image providers, remembers sessions, logs events & metrics, and enforces identity consistency with drift detection.
 
-&nbsp; def run(self, msg: UserMessage, ctx: Context) -> Response:
+V1 Capabilities
 
-&nbsp;   task = msg.text.split(":",1)\[1].strip() or "(nothing)"
+Provider routing with fallback (comfyui → openai → stub)
 
-&nbsp;   return Response(text=f"{ctx.soulprint.voice\_tag()}: doing {task}")
+Identity lock + drift scoring (stored in DB)
 
-## Drift Detection (Phase A8)
+Sessions, events, metrics
 
-Every generated image is compared to the reference image (`REFERENCE_IMAGE_ALPHA`) to enforce
-**"Sam remembers Sam"**.
+Image APIs:
 
-- **Drift score:** A float in [0,1], where 0 = identical, 1 = maximum drift.
-- **Methods:** CLIP embeddings (preferred), pHash, SSIM. Auto-fallback if unavailable.
-- **Threshold:** Controlled by `DRIFT_THRESHOLD` (default 0.35).
-- **On breach:**
-  - Event `image.drift.detected` is logged
-  - An `emm.onebounce` event is emitted
-  - `/metrics` counter `image_drift_detected_count` increments
-  - Drift score is persisted to the DB
+/image/generate
 
-### Example .env
+/image/{id}
 
-### Drift detection (Phase A8a)
+/image/{id}/file
 
-Drift scoring is centralized in `samos/providers/image_base.py`.
+/image/latest/file
 
-Env controls:
-- `DRIFT_METHOD` — one of `auto|clip|phash|ssim` (default: `auto`)
-  - `auto` tries **CLIP → pHash → SSIM** in that order, falling back if a method isn’t available.
-- `DRIFT_THRESHOLD` — float in `[0..1]` (default: `0.35`). If `drift_score > threshold`, we:
-  - increment `image_drift_detected_count` (in `/metrics`)
-  - emit events: `image.drift.detected` and `emm.onebounce`
+/events
 
-Every image generation persists metadata (incl. `drift_score`) and fires `image.generate.ok` or `image.generate.fail`.
+/metrics
 
-### Drift detection (Phase A8a)
+Reproducible DB migrations (Alembic baseline)
 
-Drift scoring is centralized in `samos/providers/image_base.py`.
+File serving (local paths, file://, or redirect)
 
-**Env controls**
-- `DRIFT_METHOD` — `auto|clip|phash|ssim` (default: `auto`).  
-  `auto` tries **CLIP → pHash → SSIM**, falling back if unavailable.
-- `DRIFT_THRESHOLD` — float `[0..1]` (default: `0.35`).  
-  If `drift_score > threshold`, we increment `image_drift_detected_count` and emit
-  `image.drift.detected` + `emm.onebounce`.
+Quick Start
+git clone https://github.com/SamOS-sketch/SamOS_master.git
+cd SamOS_master
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+pip install -r requirements.txt
 
-**Behavior**
-- Every generation persists metadata (incl. `drift_score`) and emits `image.generate.ok` or `image.generate.fail`.
-- File URLs are normalized (e.g., `file:///D:/...`).
-- `meta.reference_used` is always present (true/false).
-## Image providers & routing
+# Bootstrap DB
+python tools/db_bootstrap.py
 
-SamOS can route across multiple providers with automatic fallback.
+# Start API
+uvicorn samos.api.main:app --reload --port 8000
 
-- Primary: `IMAGE_PROVIDER`
-- Fallback chain: `IMAGE_PROVIDER_FALLBACK` (colon-separated)
-- Example: `comfyui:openai:stub`
+
+Smoke Test
+
+# Run golden smoke test
+powershell -ExecutionPolicy Bypass -File scripts\smoke.ps1
+
+
+Expected: Smoke OK – image ... saved as smoke.png
+
+API Quick Reference
+Sessions
+
+POST /session/start
+Returns { "session_id": "uuid" }.
+
+Image
+
+POST /image/generate → generate image
+
+GET /image/{id} → get metadata
+
+GET /image/{id}/file → serve/download file
+
+GET /image/latest/file → most recent file
+
+Events
+
+GET /events → list events (JSON)
+
+Metrics
+
+GET /metrics → counters + gauges
+
+Drift Detection (Phase A8)
+
+Every generated image is compared to the reference (REFERENCE_IMAGE_ALPHA) to enforce
+“Sam remembers Sam.”
+
+Drift score: float [0,1] (0 = identical, 1 = max drift)
+
+Methods: CLIP → pHash → SSIM (auto-fallback)
+
+Threshold: DRIFT_THRESHOLD (default 0.35)
+
+On breach:
+
+Log image.drift.detected
+
+Emit emm.onebounce
+
+Increment /metrics counter image_drift_detected_count
+
+Persist drift score in DB
+
+Image Providers & Routing
+
+SamOS can route across providers with fallback.
+
+Primary: IMAGE_PROVIDER
+
+Fallback: IMAGE_PROVIDER_FALLBACK (colon-separated, e.g. comfyui:openai:stub)
 
 Providers:
-- `comfyui` — local ComfyUI (or stub/live via `COMFYUI_MODE`)
-- `openai` — `gpt-image-1`
-- `stub` — safe default, always returns a tiny PNG
 
-### Environment
+comfyui — local ComfyUI (or stub/live via COMFYUI_MODE)
+
+openai — gpt-image-1
+
+stub — safe default, always returns a tiny PNG
+
+Environment Variables
+
+Core env vars for V1:
+
+IMAGE_PROVIDER=stub
+IMAGE_PROVIDER_FALLBACK=
+COMFYUI_URL=http://127.0.0.1:8189
+OPENAI_API_KEY=sk-...
+DRIFT_METHOD=auto
+DRIFT_THRESHOLD=0.35
+SAM_STORAGE_DIR=outputs
+DATABASE_URL=sqlite:///./samos.db
+
+Troubleshooting
+
+Migrations fail
+→ Run python tools/db_bootstrap.py --reset
+
+File not found
+→ Ensure SAM_STORAGE_DIR exists or paths are normalized
+
+Drift errors
+→ Install extras:
+
+pip install pillow imagehash scikit-image open-clip-torch torch torchvision
 
 
+ComfyUI not responding
+→ Check COMFYUI_URL in .env and confirm ComfyUI is running
+
+Changelog
+v1.0.0
+
+First stable release
+
+End-to-end runtime: sessions, images, events, metrics
+
+Provider routing + drift detection
+
+Golden smoke test script added
+
+License
+
+Private / internal only.
