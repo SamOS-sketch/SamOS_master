@@ -7,6 +7,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from samos.api.routes_sessions import router as sessions_router
+
+app.include_router(sessions_router)
 
 # ---- Local imports ----------------------------------------------------------
 from samos.api.paths import ensure_static_dirs
