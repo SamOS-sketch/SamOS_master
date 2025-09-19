@@ -30,6 +30,20 @@ from samos.providers.stub import StubProvider  # noqa: F401
 
 router = APIRouter()
 
+# ---------- error-chain helper ----------
+from datetime import datetime
+
+def _append_error(chain: list[dict], provider: str, err: Exception, extra: dict | None = None):
+    entry = {
+        "provider": provider,
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "type": err.__class__.__name__,
+        "message": str(err),
+    }
+    if extra:
+        entry.update(extra)
+    chain.append(entry)
+
 
 # -------- request/response models (local, to avoid touching global schemas right now) --------
 class ImageGenerateRequest(BaseModel):
@@ -273,6 +287,7 @@ def image_generate(payload: ImageGenerateRequest):
         _emit(db, session_id, "image.route.policy", "policy", {"providers": chain})
 
     last_error: Optional[str] = None
+    error_chain: list[dict] = []  # accumulate per-provider failures until success
 
     for name in chain:
         provider = _instantiate(name)
@@ -302,6 +317,13 @@ def image_generate(payload: ImageGenerateRequest):
             except Exception:
                 drift = 1.0
 
+            # Attach error_chain and latency into meta before persisting
+            meta = dict(result.get("meta") or {})
+            meta.setdefault("latency_ms", tried_ms)
+            if error_chain:
+                meta["error_chain"] = error_chain
+            result["meta"] = meta
+
             with SessionLocal() as db:
                 db_img = _persist_ok(
                     db=db,
@@ -320,7 +342,7 @@ def image_generate(payload: ImageGenerateRequest):
                     {
                         "id": db_img.id,
                         "provider": name,
-                        "latency_ms": result.get("meta", {}).get("latency_ms", tried_ms),
+                        "latency_ms": meta.get("latency_ms", tried_ms),
                         "url": db_img.url,
                         "local_path": db_img.local_path,
                         "drift_score": drift,
@@ -347,6 +369,7 @@ def image_generate(payload: ImageGenerateRequest):
 
         except Exception as e:
             last_error = str(e)
+            _append_error(error_chain, name, e, extra={"stage": "generate"})
             with SessionLocal() as db:
                 _emit(
                     db,
