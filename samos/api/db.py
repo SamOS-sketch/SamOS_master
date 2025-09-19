@@ -1,5 +1,7 @@
 import os
 from datetime import datetime
+from typing import Generator
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
@@ -29,12 +31,15 @@ except Exception:
 # ---------- Resolve DB URL (env > persona routing) ----------
 
 def _resolve_db_url() -> str:
-    # Highest precedence: explicit DATABASE_URL from environment
+    """
+    Decide which DB to use:
+    1) DATABASE_URL environment variable (if set)
+    2) Persona-based sqlite file under project root (private → samos.db, demo → demo.db)
+    """
     env_url = os.getenv("DATABASE_URL")
     if env_url and env_url.strip():
         return env_url.strip()
 
-    # Persona-based default (private → samos.db, demo → demo.db)
     persona = get_persona()
     return f"sqlite:///./{db_filename(persona)}"
 
@@ -46,12 +51,11 @@ DB_URL = _resolve_db_url()
 
 Base = declarative_base()
 
-# sqlite needs check_same_thread=False and benefits from a longer timeout
 _connect_args = {}
 if DB_URL.startswith("sqlite"):
     _connect_args = {
         "check_same_thread": False,
-        "timeout": 30,  # wait up to 30s if the DB is briefly busy
+        "timeout": 30,
     }
 
 engine = create_engine(
@@ -59,15 +63,14 @@ engine = create_engine(
     echo=False,
     future=True,
     connect_args=_connect_args,
-    pool_pre_ping=True,  # refresh broken connections automatically
+    pool_pre_ping=True,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 
 
-# Optional: lightweight startup log for visibility
+# Optional: lightweight startup log
 try:
-    # only import here to avoid circulars if app boot order changes
     persona_label = get_persona().value
 except Exception:
     persona_label = "unknown"
@@ -75,8 +78,7 @@ except Exception:
 print(f"[SamOS] DB: {DB_URL}  |  Persona: {persona_label}")
 
 
-# Convenience generator (used by some routes)
-def get_db():
+def get_db() -> Generator:
     db = SessionLocal()
     try:
         yield db
@@ -86,80 +88,75 @@ def get_db():
 
 # ---------- Models ----------
 
-
 class Session(Base):
     __tablename__ = "sessions"
     id = Column(String, primary_key=True, index=True)
     mode = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
-    memories = relationship(
-        "Memory", back_populates="session", cascade="all, delete-orphan"
-    )
-    images = relationship(
-        "Image", back_populates="session", cascade="all, delete-orphan"
-    )
+    memories = relationship("Memory", back_populates="session", cascade="all, delete-orphan")
+    images = relationship("Image", back_populates="session", cascade="all, delete-orphan")
     emms = relationship("EMM", back_populates="session", cascade="all, delete-orphan")
-    events = relationship(
-        "Event", back_populates="session", cascade="all, delete-orphan"
-    )
+    events = relationship("Event", back_populates="session", cascade="all, delete-orphan")
 
 
 class Memory(Base):
-    __tablename__ = "memories"  # ✅ correct plural name
+    __tablename__ = "memories"
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sessions.id"))
     key = Column(String, index=True)
     value = Column(Text)
     meta_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
     session = relationship("Session", back_populates="memories")
 
 
 class Image(Base):
     """
-    SamOS Image record (Phase A8a aligned)
+    SamOS Image record (Phase A8b aligned)
     Canonical fields:
       - url (string)
       - prompt (text)
-      - ref_used (bool)
-      - drift_score (float)
-      - provider (string)
-      - tier (string)
-      - latency_ms (int)
-      - provenance (json-as-text; optional)
-      - status (string; ok|failed)
-      - meta_json (json-as-text; optional)
+      - ref_used (bool, non-null)
+      - drift_score (float, nullable)
+      - provider (string, non-null, default 'stub')
+      - tier (string, nullable)
+      - latency_ms (int, nullable)
+      - provenance (json-as-text; legacy/optional)
+      - status (string; non-null; 'ok'|'failed')
+      - meta_json (json-as-text; nullable)
+      - local_path (text, nullable)
     """
-
     __tablename__ = "images"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True, default=lambda: uuid4().hex)
     session_id = Column(String, ForeignKey("sessions.id"))
 
     # Core request/response fields
-    url = Column(Text)                      # file:// or http(s)://
-    prompt = Column(Text)
+    url = Column(Text, nullable=False)                 # file:// or http(s)://
+    prompt = Column(Text, nullable=False)
     ref_used = Column(Boolean, nullable=False, default=False)
     drift_score = Column(Float, nullable=True)
 
+    # File location for serving
+    local_path = Column(Text, nullable=True)
+
     # Provider provenance
-    provider = Column(String(64), nullable=True)   # e.g. openai | comfyui | stub
-    tier = Column(String(32), nullable=True)       # e.g. primary | recovery | fallback
-    latency_ms = Column(Integer, nullable=True)    # measured latency for successful attempt
-    provenance = Column(Text, nullable=True)       # JSON-as-text for extra details
+    provider = Column(String(64), nullable=False, default="stub")   # openai | comfyui | stub
+    tier = Column(String(32), nullable=True)                        # primary | recovery | fallback
+    latency_ms = Column(Integer, nullable=True)
+    provenance = Column(Text, nullable=True)
 
     # Status + metadata
-    status = Column(String, default="ok")          # ok | failed
-    meta_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, nullable=False, default="ok")           # ok | failed
+    meta_json = Column(Text, nullable=True, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
 
     session = relationship("Session", back_populates="images")
 
-    # ---- Backward-compat accessors (avoid breaking older code that used `reference_used`) ----
     @property
     def reference_used(self) -> bool:
         return bool(self.ref_used)
@@ -176,7 +173,7 @@ class EMM(Base):
     type = Column(String)
     message = Column(Text)
     meta_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
 
     session = relationship("Session", back_populates="emms")
 
@@ -186,11 +183,9 @@ class Event(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sessions.id"), nullable=True)
     ts = Column(DateTime, default=datetime.utcnow, nullable=False)
-    kind = Column(
-        String, nullable=False
-    )  # e.g. session.start, mode.set, image.generate.ok
+    kind = Column(String, nullable=False)     # e.g. session.start, mode.set, image.generate.ok
     message = Column(String, nullable=False)  # short summary
-    meta_json = Column(Text, nullable=True)  # JSON string payload
+    meta_json = Column(Text, nullable=True)   # JSON string payload
 
     session = relationship("Session", back_populates="events")
 
@@ -198,32 +193,32 @@ class Event(Base):
 # Helpful indexes
 Index("idx_events_session_ts", Event.session_id, Event.ts)
 Index("idx_events_kind_ts", Event.kind, Event.ts)
+Index("idx_images_session_created", Image.session_id, Image.created_at)
+Index("idx_memories_session_created", Memory.session_id, Memory.created_at)
 
-# ---------- Optional metrics tables (used by snapshot_service if present) ----------
-
+# ---------- Optional metrics tables ----------
 
 class MetricsCounter(Base):
     __tablename__ = "metrics_counters"
     key = Column(String, primary_key=True)
     value = Column(Integer, default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
 
 class MetricsBucket(Base):
     __tablename__ = "metrics_buckets"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    metric = Column(String, index=True)  # e.g. image.ok
-    period = Column(String)  # hour | day
-    bucket_start = Column(DateTime)  # period start time
+    metric = Column(String, index=True)
+    period = Column(String)
+    bucket_start = Column(DateTime)
     value = Column(Integer, default=0)
 
 
 # ---------- init ----------
 
-def init_db():
+def init_db() -> None:
     """Create all tables if they don't exist, and harden SQLite settings."""
     Base.metadata.create_all(bind=engine)
-    # WAL + moderate sync for throughput + enforce FK integrity
     if DB_URL.startswith("sqlite"):
         with engine.begin() as conn:
             conn.execute(text("PRAGMA journal_mode=WAL;"))
