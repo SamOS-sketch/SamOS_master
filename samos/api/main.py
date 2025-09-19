@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 # Ensure storage exists (outputs/ by default, or SAM_STORAGE_DIR)
 from samos.api.paths import ensure_static_dirs
 
+# DB: guarantee schema on startup
+from samos.api.db import Base, SessionLocal
+
 # Canonical routers (must exist)
 from samos.api.routes_images import router as images_router
 from samos.api.routes_sessions import router as sessions_router
@@ -40,6 +43,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure DB schema exists at startup (creates missing tables; safe to run repeatedly)
+@app.on_event("startup")
+def _ensure_schema() -> None:
+    try:
+        with SessionLocal() as s:
+            bind = s.get_bind()
+            Base.metadata.create_all(bind=bind)
+    except Exception:
+        # Don't block startup if DB is read-only or unavailable; routes will surface errors.
+        pass
 
 # Required routers
 app.include_router(sessions_router)
