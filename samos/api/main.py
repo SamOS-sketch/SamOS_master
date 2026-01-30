@@ -1,71 +1,94 @@
-# samos/api/main.py
+"""
+samos.api.main
+
+Deterministic app wiring:
+- Do NOT rely on optional "Central SamRouter" (it has been failing due to helper import issues).
+- Always include Ops router (routes_ops) so /ops/* endpoints are stable.
+- Include other routers only if their imports succeed.
+"""
+
 from __future__ import annotations
 
+import logging
+from importlib import import_module
+from typing import Optional
+
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
-# Ensure storage exists (outputs/ by default, or SAM_STORAGE_DIR)
-from samos.api.paths import ensure_static_dirs
+# IMPORTANT: SessionLocal must come from your real DB module.
+# If this import fails, readyz will return db error, but the API can still start.
+try:
+    from samos.api.db import SessionLocal  # type: ignore
+except Exception:  # pragma: no cover
+    SessionLocal = None  # type: ignore
 
-# DB: guarantee schema on startup
-from samos.api.db import Base, SessionLocal
+log = logging.getLogger("samos")
+logging.basicConfig(level=logging.INFO)
 
-# Canonical routers (must exist)
-from samos.api.routes_images import router as images_router
-from samos.api.routes_sessions import router as sessions_router
+app = FastAPI(title="SamOS API")
 
-# Optional routers (best-effort import; ok if absent)
-def _try_include(app: FastAPI, import_path: str, attr: str) -> None:
+
+def _try_include(module_path: str, attr: str = "router", prefix: str = "") -> bool:
+    """
+    Try importing module_path and include its APIRouter named `attr`.
+    Returns True if included, False otherwise.
+    """
     try:
-        mod = __import__(import_path, fromlist=[attr])
+        mod = import_module(module_path)
         router = getattr(mod, attr)
-        app.include_router(router)
-    except Exception:
-        # Keep server booting even if optional routers are missing
-        pass
+        app.include_router(router, prefix=prefix)
+        log.info("[SamOS] Included router: %s.%s%s", module_path, attr, f" (prefix='{prefix}')" if prefix else "")
+        return True
+    except Exception as e:
+        log.warning("[SamOS] Failed to include router: %s.%s (%s: %s)", module_path, attr, type(e).__name__, e)
+        return False
 
 
-# -------------------- App --------------------
-ensure_static_dirs()
+# -------------------------------------------------------------------
+# ROUTER WIRING (ORDER MATTERS)
+# -------------------------------------------------------------------
+# 1) OPS MUST ALWAYS BE PRESENT
+# routes_ops.py already defines prefix="/ops" on its router, so DO NOT add prefix here.
+_try_include("samos.api.routes_ops", "router")
 
-app = FastAPI(
-    title="SamOS API",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-)
+# 2) CORE ROUTERS (best-effort; include if present)
+_try_include("samos.api.routes_sessions", "router")
+_try_include("samos.api.routes_images", "router")
+_try_include("samos.api.routes_chat", "router")
 
-# Dev-friendly CORS (tighten later if you expose this)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 3) OPTIONAL FEATURE SETS (best-effort)
+_try_include("samos.api.routes_alpha", "router")
+_try_include("samos.api.routes_admin", "router")
 
-# Ensure DB schema exists at startup (creates missing tables; safe to run repeatedly)
-@app.on_event("startup")
-def _ensure_schema() -> None:
-    try:
-        with SessionLocal() as s:
-            bind = s.get_bind()
-            Base.metadata.create_all(bind=bind)
-    except Exception:
-        # Don't block startup if DB is read-only or unavailable; routes will surface errors.
-        pass
+# If routes_events currently fails due to helper imports (ok_list/_ok_list), keep it best-effort.
+_try_include("samos.api.routes_events", "router")
 
-# Required routers
-app.include_router(sessions_router)
-app.include_router(images_router)
+# Snapshot/health modules have been failing in your logs; keep best-effort.
 
-# Optional routers (only if present)
-_try_include(app, "samos.api.routes_events", "router")
-_try_include(app, "samos.api.routes_admin", "router")
-_try_include(app, "samos.api.routes_snapshot", "router")
-_try_include(app, "samos.api.health", "router")
 
-# Basic liveness
+# -------------------------------------------------------------------
+# HEALTH ENDPOINTS (always available)
+# -------------------------------------------------------------------
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True, "service": "samos", "version": "1.0.0"}
+    return {"ok": True, "service": "samos"}
+
+@app.get("/health")
+def health() -> dict:
+    return healthz()
+
+@app.get("/readyz")
+def readyz() -> dict:
+    """
+    DB readiness check. If SessionLocal import fails, report that clearly.
+    """
+    if SessionLocal is None:
+        return {"ok": False, "db": "SessionLocal import failed (check samos.api.db import path)"}
+
+    try:
+        with SessionLocal() as s:  # type: ignore
+            s.execute(text("SELECT 1"))
+        return {"ok": True, "db": "ready"}
+    except Exception as e:
+        return {"ok": False, "db": f"error: {type(e).__name__}"}
