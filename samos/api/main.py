@@ -57,6 +57,7 @@ _try_include("samos.api.routes_ops", "router")
 _try_include("samos.api.routes_sessions", "router")
 _try_include("samos.api.routes_images", "router")
 _try_include("samos.api.routes_chat", "router")
+_try_include("samos.api.health", "router")
 
 # 3) OPTIONAL FEATURE SETS (best-effort)
 _try_include("samos.api.routes_alpha", "router")
