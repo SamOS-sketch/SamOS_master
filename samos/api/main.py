@@ -6,6 +6,7 @@ Deterministic app wiring:
 - Always include Ops router (routes_ops) so /ops/* endpoints are stable.
 - Include other routers only if their imports succeed.
 """
+# NOTE: Ops routing is intentionally isolated. Do NOT include health, snapshot, or operator routers here.
 
 from __future__ import annotations
 
